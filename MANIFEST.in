@@ -1,0 +1,19 @@
+include AUTHORS.rst
+include CONTRIBUTING.rst
+include HISTORY.rst
+include LICENSE
+include README.rst
+include .editorconfig
+include release.sh
+include runtests.py
+include tox.ini
+include requirements_dev.txt
+
+recursive-include tests *
+recursive-include src *
+recursive-include .github *
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+
+recursive-include docs *.rst conf.py Makefile make.bat *.jpg *.png *.gif
+recursive-exclude * *~
