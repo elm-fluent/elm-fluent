@@ -14,6 +14,7 @@ with open('HISTORY.rst') as history_file:
 requirements = [
     'Click>=6.0',
     'fluent>=0.8.0',
+    'attrs>=18',
 ]
 
 setup_requirements = []
