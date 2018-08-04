@@ -8,15 +8,23 @@ import unittest
 from elm_fluent import codegen
 
 
-def normalize_python(text):
+def normalize_elm(text):
     return textwrap.dedent(text.rstrip()).strip()
 
 
 class TestCodeGen(unittest.TestCase):
 
     def assertCodeEqual(self, code1, code2):
-        self.assertEqual(normalize_python(code1),
-                         normalize_python(code2))
+        self.assertEqual(normalize_elm(code1),
+                         normalize_elm(code2))
+
+    def test_module_builtins(self):
+        module = codegen.Module()
+        self.assertIn('min', module.all_reserved_names())
+
+    def test_module_keywords(self):
+        module = codegen.Module()
+        self.assertIn('import', module.all_reserved_names())
 
     def test_reserve_name(self):
         scope = codegen.Scope()
@@ -83,40 +91,70 @@ class TestCodeGen(unittest.TestCase):
     def test_function(self):
         module = codegen.Module()
         func = codegen.Function('myfunc', args=['myarg1', 'myarg2'],
-                                parent_scope=module)
+                                parent_scope=module,
+                                body=codegen.String("hello"))
         self.assertCodeEqual(func.as_source_code(), """
-            def myfunc(myarg1, myarg2):
-                pass
+            myfunc myarg1 myarg2 =
+                "hello"
         """)
 
-    def test_function_kwargs(self):
-        module = codegen.Module()
-        func = codegen.Function('myfunc', args=['myarg1'], kwargs={'myarg2': codegen.NoneExpr()},
-                                parent_scope=module)
-        self.assertCodeEqual(func.as_source_code(), """
-            def myfunc(myarg1, myarg2=None):
-                pass
-        """)
-
-    def test_function_return(self):
+    def test_let_no_assignments(self):
         module = codegen.Module()
         func = codegen.Function('myfunc',
                                 parent_scope=module)
-        func.add_return(codegen.String("Hello"))
+        func.body.value = codegen.String("Hello")
+        func = codegen.simplify(func)
         self.assertCodeEqual(func.as_source_code(), """
-            def myfunc():
-                return 'Hello'
+            myfunc =
+                "Hello"
+        """)
+
+    def test_let_one_assignment(self):
+        module = codegen.Module()
+        func = codegen.Function('myfunc',
+                                parent_scope=module)
+        let = func.body
+        let.reserve_name('x')
+        let.add_assignment('x', codegen.String("Hello"))
+        let.value = codegen.VariableReference('x', let)
+        func = codegen.simplify(func)
+        self.assertCodeEqual(func.as_source_code(), """
+            myfunc =
+                "Hello"
+        """)
+
+    def test_let_two_assignments(self):
+        module = codegen.Module()
+        func = codegen.Function('myfunc',
+                                parent_scope=module)
+        let = func.body
+        let.reserve_name('x')
+        let.reserve_name('y')
+        let.add_assignment('x', codegen.Number(1))
+        let.add_assignment('y', codegen.Number(2))
+        let.value = codegen.Add(codegen.VariableReference('x', let),
+                                codegen.VariableReference('y', let))
+        func = codegen.simplify(func)
+        # TODO - remove unnecessary parenthesis in final expression
+        self.assertCodeEqual(func.as_source_code(), """
+            myfunc =
+                let
+                    x = 1
+                    y = 2
+                in
+                    (x + y)
         """)
 
     def test_add_function(self):
         module = codegen.Module()
         func_name = module.reserve_name('myfunc')
         func = codegen.Function(func_name,
-                                parent_scope=module)
+                                parent_scope=module,
+                                body=codegen.String("hi"))
         module.add_function(func_name, func)
         self.assertCodeEqual(module.as_source_code(), """
-            def myfunc():
-                pass
+            myfunc =
+                "hi"
         """)
 
     def test_variable_reference(self):
@@ -157,38 +195,50 @@ class TestCodeGen(unittest.TestCase):
 
     def test_function_args_name_reserved_check(self):
         module = codegen.Module()
-        module.reserve_function_arg_name('my_arg')
+        module.reserve_function_arg_name('myarg')
         func_name = module.reserve_name('myfunc')
-        func = codegen.Function(func_name, args=['my_arg'],
+        func = codegen.Function(func_name, args=['myarg'],
                                 parent_scope=module)
-        func.add_return(codegen.VariableReference('my_arg', func))
+        func.body.value = codegen.VariableReference('myarg', func)
+        func = codegen.simplify(func)
         self.assertCodeEqual(func.as_source_code(), """
-            def myfunc(my_arg):
-                return my_arg
+           myfunc myarg =
+               myarg
         """)
 
     def test_add_assignment_unreserved(self):
         scope = codegen.Scope()
+        let = codegen.Let(parent_scope=scope)
         self.assertRaises(AssertionError,
-                          scope.add_assignment,
+                          let.add_assignment,
                           'x',
                           codegen.String('a string'))
 
     def test_add_assignment_reserved(self):
         scope = codegen.Scope()
-        name = scope.reserve_name('x')
-        scope.add_assignment(name, codegen.String('a string'))
-        self.assertCodeEqual(scope.as_source_code(), """
-            x = 'a string'
+        let = codegen.Let(parent_scope=scope)
+        name = let.reserve_name('x')
+        let.add_assignment(name, codegen.String('a string'))
+        let.value = codegen.String('other')
+        self.assertCodeEqual(let.as_source_code(), """
+            let
+                x = "a string"
+            in
+                "other"
         """)
 
     def test_add_assignment_multi(self):
         scope = codegen.Scope()
-        name1 = scope.reserve_name('x')
-        name2 = scope.reserve_name('y')
-        scope.add_assignment((name1, name2), codegen.Tuple(codegen.String('a string'), codegen.String('another')))
-        self.assertCodeEqual(scope.as_source_code(), """
-            x, y = ('a string', 'another')
+        let = codegen.Let()
+        name1 = let.reserve_name('x')
+        name2 = let.reserve_name('y')
+        let.add_assignment((name1, name2), codegen.Tuple(codegen.String('a string'), codegen.String('another')))
+        let.value = codegen.String("other")
+        self.assertCodeEqual(let.as_source_code(), """
+            let
+                (x, y) = ("a string", "another")
+            in
+                "other"
         """)
 
     def test_function_call_unknown(self):
@@ -197,129 +247,70 @@ class TestCodeGen(unittest.TestCase):
                           codegen.FunctionCall,
                           'a_function',
                           [],
-                          {},
                           scope)
 
     def test_function_call_known(self):
         scope = codegen.Scope()
-        scope.reserve_name('a_function')
-        func_call = codegen.FunctionCall('a_function', [], {}, scope)
-        self.assertCodeEqual(func_call.as_source_code(), "a_function()")
+        scope.reserve_name('aFunction')
+        func_call = codegen.FunctionCall('aFunction', [], scope)
+        self.assertCodeEqual(func_call.as_source_code(), "aFunction")
 
-    def test_function_call_args_and_kwargs(self):
+    def test_function_call_args(self):
         scope = codegen.Scope()
-        scope.reserve_name('a_function')
-        func_call = codegen.FunctionCall('a_function', [codegen.Number(123)], {'x': codegen.String("hello")}, scope)
-        self.assertCodeEqual(func_call.as_source_code(), "a_function(123, x='hello')")
+        scope.reserve_name('aFunction')
+        func_call = codegen.FunctionCall('aFunction', [codegen.Number(123)], scope)
+        self.assertCodeEqual(func_call.as_source_code(), "aFunction 123")
 
-    def test_try_catch(self):
+    def test_if(self):
         scope = codegen.Scope()
-        scope.reserve_name('MyError')
-        t = codegen.TryCatch(codegen.VariableReference('MyError', scope), scope)
-        self.assertCodeEqual(t.as_source_code(), """
-            try:
-                pass
-            except MyError:
-                pass
-        """)
-        scope.reserve_name('x')
-        t.try_block.add_assignment('x', codegen.String("x"))
-        t.except_block.add_assignment('x', codegen.String("y"))
-        t.else_block.add_assignment('x', codegen.String("z"))
-        self.assertCodeEqual(t.as_source_code(), """
-            try:
-                x = 'x'
-            except MyError:
-                x = 'y'
-            else:
-                x = 'z'
-        """)
-
-    def test_if_empty(self):
-        scope = codegen.Scope()
-        if_statement = codegen.If(scope)
-        self.assertCodeEqual(if_statement.as_source_code(), "")
-
-    def test_if_one_if(self):
-        scope = codegen.Scope()
-        if_statement = codegen.If(scope)
-        first_block = if_statement.add_if(codegen.Number(1))
-        first_block.statements.append(codegen.Return(codegen.Number(2)))
-        self.assertCodeEqual(if_statement.as_source_code(), """
-            if 1:
-                return 2
-        """)
-
-    def test_if_two_ifs(self):
-        scope = codegen.Scope()
-        if_statement = codegen.If(scope)
-        first_block = if_statement.add_if(codegen.Number(1))
-        first_block.statements.append(codegen.Return(codegen.Number(2)))
-        second_block = if_statement.add_if(codegen.Number(3))
-        second_block.statements.append(codegen.Return(codegen.Number(4)))
-        self.assertCodeEqual(if_statement.as_source_code(), """
-            if 1:
-                return 2
-            elif 3:
-                return 4
-        """)
-
-    def test_if_with_else(self):
-        scope = codegen.Scope()
-        if_statement = codegen.If(scope)
-        first_block = if_statement.add_if(codegen.Number(1))
-        first_block.statements.append(codegen.Return(codegen.Number(2)))
-        if_statement.else_block.statements.append(codegen.Return(codegen.Number(3)))
-        self.assertCodeEqual(if_statement.as_source_code(), """
-            if 1:
-                return 2
-            else:
-                return 3
-        """)
-
-    def test_if_no_ifs(self):
-        scope = codegen.Scope()
-        if_statement = codegen.If(scope)
-        if_statement.else_block.statements.append(codegen.Return(codegen.Number(3)))
-        if_statement = codegen.simplify(if_statement)
-        self.assertCodeEqual(if_statement.as_source_code(), """
-            return 3
+        if_expr = codegen.If(parent_scope=scope)
+        if_expr.condition = codegen.Equals(codegen.Number(1),
+                                           codegen.Number(2))
+        if_expr.true_branch.value = codegen.Number(3)
+        if_expr.false_branch.value = codegen.Number(4)
+        if_expr = codegen.simplify(if_expr)
+        self.assertCodeEqual(if_expr.as_source_code(), """
+            if (1 == 2) then
+                3
+            else
+                4
         """)
 
     def test_string_join_empty(self):
-        join = codegen.StringJoin([])
+        join = codegen.Concat([])
         join = codegen.simplify(join)
-        self.assertCodeEqual(join.as_source_code(), "''")
+        self.assertCodeEqual(join.as_source_code(), '""')
 
     def test_string_join_one(self):
-        join = codegen.StringJoin([codegen.String('hello')])
+        join = codegen.Concat([codegen.String('hello')])
         join = codegen.simplify(join)
-        self.assertCodeEqual(join.as_source_code(), "'hello'")
+        self.assertCodeEqual(join.as_source_code(), '"hello"')
 
     def test_string_join_two(self):
         scope = codegen.Scope()
         scope.reserve_name('tmp')
         var = codegen.VariableReference('tmp', scope)
-        join = codegen.StringJoin([codegen.String('hello '), var])
-        self.assertCodeEqual(join.as_source_code(), "''.join(['hello ', tmp])")
+        join = codegen.Concat([codegen.String('hello '), var])
+        self.assertCodeEqual(join.as_source_code(), 'String.concat ["hello ", tmp]')
 
     def test_string_join_collapse_strings(self):
         scope = codegen.Scope()
         scope.reserve_name('tmp')
         var = codegen.VariableReference('tmp', scope)
-        join1 = codegen.StringJoin([codegen.String('hello '),
-                                    codegen.String('there '),
-                                    var,
-                                    codegen.String(' how'),
-                                    codegen.String(' are you?'),
-                                    ])
+        join1 = codegen.Concat([codegen.String('hello '),
+                                codegen.String('there '),
+                                var,
+                                codegen.String(' how'),
+                                codegen.String(' are you?'),
+                                ])
         join1 = codegen.simplify(join1)
-        self.assertCodeEqual(join1.as_source_code(), "''.join(['hello there ', tmp, ' how are you?'])")
+        self.assertCodeEqual(join1.as_source_code(), 'String.concat ["hello there ", tmp, " how are you?"]')
 
     def test_cleanup_name(self):
         for n, c in [('abc-def()[]ghi,.<>¡!?¿', 'abcdefghi'),  # illegal chars
-                     ('1abc', 'n1abc'),  # leading digit
-                     ('_allowed', '_allowed'),  # leading _ (which is allowed)
-                     ('-', 'n')  # empty after removing illegals
+                     ('1abc', 'n1abc'),  # leading digit not allowed
+                     ('-', 'n'),  # aboid being empty after removing illegals
+                     ('_abc', 'n_abc'),  # leading underscore not allowed
+                     ('abc_def', 'abc_def'),  # underscore in middle is allowed
                      ]:
             self.assertEqual(codegen.cleanup_name(n), c)

@@ -69,6 +69,22 @@ Ready to contribute? Here's how to set up `elm_fluent` for local development.
     $ mkvirtualenv elm_fluent
     $ cd elm-fluent/
     $ python setup.py develop
+    $ pip install -r requirements_dev.txt
+
+   We also need Elm and some other tools installed. If you don't already have it
+   installed and available on your path, you can use nodeenv to first create a
+   nodejs virtualenv::
+
+    $ nodeenv --python-virtualenv
+
+   Reload the virtualenv for changes to take affect::
+
+    $ deactivate
+    $ workon elm_fluent
+
+  And then install things into it::
+
+    $ npm install -g elm
 
 4. Create a branch for local development::
 

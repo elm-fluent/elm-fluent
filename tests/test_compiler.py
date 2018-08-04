@@ -11,7 +11,7 @@ from elm_fluent.compiler import messages_to_module
 from elm_fluent.exceptions import FluentCyclicReferenceError, FluentReferenceError
 
 from .utils import dedent_ftl
-from .test_codegen import normalize_python
+from .test_codegen import normalize_elm
 
 # Some TDD tests to help develop CompilingMessageContext. It should be possible to delete
 # the tests here and still have complete test coverage of the compiler.py module, via
@@ -43,8 +43,8 @@ class TestCompiler(unittest.TestCase):
     maxDiff = None
 
     def assertCodeEqual(self, code1, code2):
-        self.assertEqual(normalize_python(code1),
-                         normalize_python(code2))
+        self.assertEqual(normalize_elm(code1),
+                         normalize_elm(code2))
 
     def test_single_string_literal(self):
         code, errs = compile_messages_to_python("""

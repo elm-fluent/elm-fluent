@@ -8,13 +8,13 @@ import re
 
 from six import text_type
 
-# This module provides simple utilities for building up Python source code. It
+# This module provides simple utilities for building up Elm source code. It
 # implements only what is really needed by compiler.py, with a number of aims
 # and constraints:
 #
 # 1. Performance.
 #
-#    The resulting Python code should do as little as possible, especially for
+#    The resulting Elm code should do as little as possible, especially for
 #    simple cases (which are by far the most common for .ftl files)
 #
 # 2. Correctness (obviously)
@@ -26,7 +26,7 @@ from six import text_type
 #
 # 3. Simplicity
 #
-#    The resulting Python code should be easy to read and understand.
+#    The resulting Elm code should be easy to read and understand.
 #
 # 4. Predictability
 #
@@ -40,7 +40,7 @@ PROPERTY_RETURN_TYPE = 'PROPERTY_RETURN_TYPE'
 UNKNOWN_TYPE = object
 
 
-class PythonAst(object):
+class ElmAst(object):
     def simplify(self, changes):
         """
         Simplify the statement/expression, returning either a modified
@@ -54,11 +54,10 @@ class PythonAst(object):
         return self
 
 
-class Scope(PythonAst):
+class Scope(ElmAst):
     def __init__(self, parent_scope=None):
         super(Scope, self).__init__()
         self.parent_scope = parent_scope
-        self.statements = []
         self.names = set()
         self._function_arg_reserved_names = set()
         self._properties = {}
@@ -78,7 +77,7 @@ class Scope(PythonAst):
     def all_reserved_names(self):
         return self.names_in_use() | self.function_arg_reserved_names()
 
-    def reserve_name(self, requested, function_arg=False, is_builtin=False, properties=None):
+    def reserve_name(self, requested, function_arg=False, properties=None):
         """
         Reserve a name as being in use in a scope.
 
@@ -108,11 +107,6 @@ class Scope(PythonAst):
         # take into account parent scope when assigning names.
 
         used = self.all_reserved_names()
-        # We need to also protect against using keywords ('class', 'def' etc.)
-        # However, some builtins are also keywords (e.g. 'None'), and so
-        # if a builtin is being reserved, don't check against the keyword list
-        if not is_builtin:
-            used = used | set(keyword.kwlist)
         while attempt in used:
             attempt = cleaned + str(count)
             count += 1
@@ -155,9 +149,172 @@ class Scope(PythonAst):
             else:
                 scope = scope.parent_scope
 
-    # self.statements can be manipulated explicitly, appending statement
-    # objects. But in some cases for a better and safe API we have explicit
-    # 'add_X' methods and sometimes make the statement objects private
+
+_IDENTIFIER_SANITIZER_RE = re.compile('[^a-zA-Z0-9_]')
+_IDENTIFIER_START_RE = re.compile('^[a-zA-Z]')
+
+
+def cleanup_name(name):
+    # Choose safe subset of known allowed chars
+    name = _IDENTIFIER_SANITIZER_RE.sub('', name)
+    if not _IDENTIFIER_START_RE.match(name):
+        name = "n" + name
+    return name
+
+
+# Default imports: see http://package.elm-lang.org/packages/elm-lang/core/latest
+# or https://github.com/elm-lang/core/blob/5.1.1/src/Basics.elm
+ELM_DEFAULT_IMPORTS = set([
+    "max", "min", "Order", "LT", "EQ", "GT", "compare", "not", "&&", "||", "xor",
+    "+", "-", "*", "/", "^", "//", "rem", "%", "negate", "abs", "sqrt", "clamp", "logBase", "e",
+    "pi", "cos", "sin", "tan", "acos", "asin", "atan", "atan2", "round", "floor", "ceiling", "truncate", "toFloat",
+    "degrees", "radians", "turns",
+    "toPolar", "fromPolar",
+    "isNaN", "isInfinite",
+    "toString", "++",
+    "identity", "always", "<|", "|>", "<<", ">>", "flip", "curry", "uncurry", "Never", "never",
+    "List", "::",
+    "Maybe", "Just", "Nothing",
+    "Result", "Ok", "Err",
+    "String",
+    "Tuple",
+    "Debug",
+    "Program",
+    "Cmd", "!",
+    "Sub",
+])
+
+# Keywords: see
+# https://github.com/elm/compiler/blob/master/compiler/src/Parse/Primitives/Keyword.hs#L57
+# However, some seem to be accepted fine as function names, they are only
+# keywords in some positions it seems. These are commented out.
+ELM_KEYWORDS = set([
+    "type",
+    # "alias",
+    "port",
+    "if",
+    "then",
+    "else",
+    "case",
+    "of",
+    "let",
+    "in",
+    "infix",
+    # "left",
+    # "right",
+    # "non",
+    "module",
+    "import",
+    "exposing",
+    "as",
+    "where",
+    # "effect",
+    # "command",
+    # "subscription",
+    # "true",
+    # "false",
+    # "null",
+])
+
+
+class Module(Scope):
+    def __init__(self, parent_scope=None):
+        super(Module, self).__init__(parent_scope=parent_scope)
+        self.statements = []
+
+    def all_reserved_names(self):
+        return super(Module, self).all_reserved_names() | ELM_KEYWORDS | ELM_DEFAULT_IMPORTS
+
+    def add_function(self, func_name, func):
+        assert func.func_name == func_name
+        self.statements.append(func)
+
+    def as_source_code(self):
+        return "".join(s.as_source_code() + "\n" for s in self.statements)
+
+    def simplify(self, changes):
+        self.statements = [s.simplify(changes) for s in self.statements]
+        return self
+
+
+class Statement(ElmAst):
+    pass
+
+
+class _Assignment(Statement):
+    def __init__(self, names, value):
+        self.names = names
+        self.value = value
+
+    def format_names(self):
+        if len(self.names) == 1:
+            return self.names[0]
+        else:
+            return "({0})".format(", ".join(n for n in self.names))
+
+    def as_source_code(self):
+        return "{0} = {1}".format(self.format_names(),
+                                  self.value.as_source_code())
+
+    def simplify(self, changes):
+        self.value = self.value.simplify(changes)
+        return self
+
+
+class Block(Scope):
+    def as_source_code(self):
+        if not self.statements:
+            return 'pass\n'
+        else:
+            return super(Block, self).as_source_code()
+
+
+class Function(Scope, Statement):
+    def __init__(self, name, args=None, parent_scope=None,
+                 body=None):
+        super(Function, self).__init__(parent_scope=parent_scope)
+        self.func_name = name
+        if body is None:
+            body = Let(parent_scope=self)
+        self.body = body
+        if args is None:
+            args = ()
+        for arg in args:
+            if (arg in parent_scope.names_in_use()):
+                raise AssertionError("Can't use '{0}' as function argument name because it shadows other names"
+                                     .format(arg))
+            self.reserve_name(arg, function_arg=True)
+        self.args = args
+
+    def as_source_code(self):
+        return '{0} {1}=\n{2}\n'.format(
+            self.func_name,
+            ''.join(a + ' ' for a in self.args),
+            indent(self.body.as_source_code())
+        )
+
+    def simplify(self, changes):
+        self.body = self.body.simplify(changes)
+        return self
+
+
+class Expression(ElmAst):
+    # type represents the Elm type this expression will produce,
+    # if we know it (UNKNOWN_TYPE otherwise).
+    type = UNKNOWN_TYPE
+
+
+class Let(Expression, Scope):
+    def __init__(self, parent_scope=None):
+        super(Let, self).__init__(parent_scope=parent_scope)
+        self.value = None
+        self.assignments = []
+
+    @property
+    def type(self):
+        assert self.value is not None
+        return self.value.type
+
     def add_assignment(self, names, value):
         """
         Adds an assigment of the form:
@@ -177,206 +334,46 @@ class Scope(PythonAst):
             if name not in self.names_in_use():
                 raise AssertionError("Cannot assign to unreserved name '{0}'".format(name))
 
-        self.statements.append(_Assignment(names, value))
-
-    def add_function(self, func_name, func):
-        assert func.func_name == func_name
-        self.statements.append(func)
-
-    def as_source_code(self):
-        return "".join(s.as_source_code() + "\n" for s in self.statements)
-
-    def simplify(self, changes):
-        self.statements = [s.simplify(changes) for s in self.statements]
-        return self
-
-
-_IDENTIFIER_SANITIZER_RE = re.compile('[^a-zA-Z0-9_]')
-_IDENTIFIER_START_RE = re.compile('^[a-zA-Z_]')
-
-
-def cleanup_name(name):
-    # See https://docs.python.org/2/reference/lexical_analysis.html#grammar-token-identifier
-    name = _IDENTIFIER_SANITIZER_RE.sub('', name)
-    if not _IDENTIFIER_START_RE.match(name):
-        name = "n" + name
-    return name
-
-
-class Module(Scope):
-    pass
-
-
-class Statement(PythonAst):
-    pass
-
-
-class _Assignment(Statement):
-    def __init__(self, names, value):
-        self.names = names
-        self.value = value
-
-    def format_names(self):
-        return ", ".join(n for n in self.names)
-
-    def as_source_code(self):
-        return "{0} = {1}".format(self.format_names(),
-                                  self.value.as_source_code())
+        self.assignments.append(_Assignment(names, value))
 
     def simplify(self, changes):
         self.value = self.value.simplify(changes)
-        return self
-
-
-class Block(Scope):
-    def as_source_code(self):
-        if not self.statements:
-            return 'pass\n'
-        else:
-            return super(Block, self).as_source_code()
-
-
-class Function(Block, Statement):
-    def __init__(self, name, args=None, kwargs=None, parent_scope=None, debug=False):
-        super(Function, self).__init__(parent_scope=parent_scope)
-        self.func_name = name
-        if args is None:
-            args = ()
-        if kwargs is None:
-            kwargs = {}
-        for arg_set in [args, kwargs.keys()]:
-            for arg in arg_set:
-                if (arg in parent_scope.names_in_use()):
-                    raise AssertionError("Can't use '{0}' as function argument name because it shadows other names"
-                                         .format(arg))
-                self.reserve_name(arg, function_arg=True)
-        self.args = args
-        self.kwargs = kwargs
-
-        if debug:
-            self.statements.append(SetBreakpoint())
-
-    def as_source_code(self):
-        line1 = 'def {0}({1}{2}):\n'.format(
-            self.func_name,
-            ', '.join(self.args),
-            (", " if self.args and self.kwargs else "") +
-            ", ".join("{0}={1}".format(name, val.as_source_code())
-                      for name, val in self.kwargs.items())
-        )
-        body = super(Function, self).as_source_code()
-        return line1 + indent(body)
-
-    def add_return(self, value):
-        self.statements.append(Return(value))
-
-    def simplify(self, changes):
-        self = super(Function, self).simplify(changes)
-        if len(self.statements) < 2:
-            return self
-        # Remove needless unpacking and repacking of final return tuple
-        if (isinstance(self.statements[-1], Return) and
-                isinstance(self.statements[-2], _Assignment)):
-            return_s = self.statements[-1]
-            assign_s = self.statements[-2]
-            return_source = return_s.value.as_source_code()
-            assign_names = assign_s.format_names()
-            if (return_source == assign_names or
-                (isinstance(return_s.value, Tuple) and
-                    return_source == "(" + assign_names + ")")):
-                new_return = Return(self.statements[-2].value)
-                self.statements = self.statements[:-2]
-                self.statements.append(new_return)
-                changes.append(True)
-        return self
-
-
-class Return(Statement):
-    def __init__(self, value):
-        self.value = value
-
-    def as_source_code(self):
-        return 'return {0}'.format(self.value.as_source_code())
-
-    def simplify(self, changes):
-        self.value = self.value.simplify(changes)
-        return self
-
-
-class If(Statement):
-    def __init__(self, parent_scope):
-        self.if_blocks = []
-        self._conditions = []
-        self.else_block = Block(parent_scope=parent_scope)
-        self._parent_scope = parent_scope
-
-    def add_if(self, condition):
-        new_if = Block(parent_scope=self._parent_scope)
-        self.if_blocks.append(new_if)
-        self._conditions.append(condition)
-        return new_if
-
-    def as_source_code(self):
-        first = True
-        output = []
-
-        for condition, if_block in zip(self._conditions, self.if_blocks):
-            if_start = "if" if first else "elif"
-            condition_rendered = condition.as_source_code()
-            if (condition_rendered.startswith('(') and
-                    condition_rendered.endswith(')')):
-                condition_rendered = condition_rendered[1:-1]
-            output.append("{0} {1}:\n".format(if_start, condition_rendered))
-            output.append(indent(if_block.as_source_code()))
-            first = False
-        if self.else_block.statements:
-            output.append("else:\n")
-            output.append(indent(self.else_block.as_source_code()))
-        return ''.join(output)
-
-    def simplify(self, changes):
-        self.if_blocks = [block.simplify(changes) for block in self.if_blocks]
-        self._conditions = [expr.simplify(changes) for expr in self._conditions]
-        self.else_block = self.else_block.simplify(changes)
-        if not self.if_blocks:
-            # Unusual case of no conditions, only default case, but it
-            # simplifies other code to be able to handle this uniformly. We can
-            # replace this if statement with a single unconditional block.
+        for assignment in self.assignments:
+            assignment.simplify(changes)
+        if len(self.assignments) == 0:
             changes.append(True)
-            return self.else_block
-        else:
-            return self
-
-
-class TryCatch(Statement):
-    def __init__(self, catch_exception, parent_scope):
-        self.catch_exception = catch_exception
-        self.try_block = Block(parent_scope=parent_scope)
-        self.except_block = Block(parent_scope=parent_scope)
-        self.else_block = Block(parent_scope=parent_scope)
-
-    def as_source_code(self):
-        retval = ("try:\n" +
-                  indent(self.try_block.as_source_code()) +
-                  "except {0}:\n".format(self.catch_exception.as_source_code()) +
-                  indent(self.except_block.as_source_code()))
-        if self.else_block.statements:
-            retval += ("else:\n" +
-                       indent(self.else_block.as_source_code()))
-        return retval
-
-    def simplify(self, changes):
-        self.catch_exception = self.catch_exception.simplify(changes)
-        self.try_block = self.try_block.simplify(changes)
-        self.except_block = self.except_block.simplify(changes)
-        self.else_block = self.else_block.simplify(changes)
+            return self.value
+        if len(self.assignments) == 1:
+            if isinstance(self.value, VariableReference):
+                if [self.value.name] == list(self.assignments[0].names):
+                    changes.append(True)
+                    return self.assignments[0].value
         return self
 
+    def as_source_code(self):
+        return "let\n{0}in\n{1}\n".format(
+            indent("\n".join(a.as_source_code() for a in self.assignments)),
+            indent(self.value.as_source_code()))
 
-class Expression(PythonAst):
-    # type represents the Python type this expression will produce,
-    # if we know it (UNKNOWN_TYPE otherwise).
-    type = UNKNOWN_TYPE
+
+class If(Expression):
+    def __init__(self, condition=None, true_branch=None, false_branch=None,
+                 parent_scope=None):
+        self.condition = condition
+        self.true_branch = true_branch or Let(parent_scope=parent_scope)
+        self.false_branch = false_branch or Let(parent_scope=parent_scope)
+
+    def as_source_code(self):
+        return 'if {0} then\n{1}else\n{2}'.format(
+            self.condition.as_source_code(),
+            indent(self.true_branch.as_source_code()),
+            indent(self.false_branch.as_source_code()))
+
+    def simplify(self, changes):
+        self.condition = self.condition.simplify(changes)
+        self.true_branch = self.true_branch.simplify(changes)
+        self.false_branch = self.false_branch.simplify(changes)
+        return self
 
 
 class String(Expression):
@@ -386,15 +383,7 @@ class String(Expression):
         self.string_value = string_value
 
     def as_source_code(self):
-        retval = repr(self.string_value)
-        # We eventually call 'exec' in a module that has 'from __future__ import
-        # unicode_literals' at module level, which means that without a 'u' prefix we
-        # still get unicode objects in Python 2. So for consistency with Python 3
-        # and easier testing we remove these unnecessary prefixes.
-        if retval.startswith('u'):
-            return retval[1:]
-        else:
-            return retval
+        return '"{0}"'.format(self.string_value.replace('"', '\\"'))
 
 
 class Number(Expression):
@@ -419,14 +408,14 @@ class List(Expression):
         return self
 
 
-class StringJoin(Expression):
+class Concat(Expression):
     type = text_type
 
     def __init__(self, parts):
         self.parts = parts
 
     def as_source_code(self):
-        return "''.join(" + List(self.parts).as_source_code() + ')'
+        return "String.concat {0}".format(List(self.parts).as_source_code())
 
     def simplify(self, changes):
         # Simplify sub parts
@@ -446,7 +435,7 @@ class StringJoin(Expression):
             changes.append(True)
         self.parts = new_parts
 
-        # See if we eliminate the StringJoin altogether
+        # See if we eliminate the Concat altogether
         if len(self.parts) == 0:
             changes.append(True)
             return String('')
@@ -484,24 +473,20 @@ class VariableReference(Expression):
 
 
 class FunctionCall(Expression):
-    def __init__(self, function_name, args, kwargs, scope, expr_type=UNKNOWN_TYPE):
+    def __init__(self, function_name, args, scope, expr_type=UNKNOWN_TYPE):
         if function_name not in scope.names_in_use():
             raise AssertionError("Cannot call unknown function '{0}'".format(function_name))
         self.function_name = function_name
         self.args = args
-        self.kwargs = kwargs
         if expr_type is UNKNOWN_TYPE:
             # Try to find out automatically
             expr_type = scope.get_name_properties(function_name).get(PROPERTY_RETURN_TYPE, expr_type)
         self.type = expr_type
 
     def as_source_code(self):
-        return "{0}({1}{2})".format(self.function_name,
-                                    ", ".join(arg.as_source_code() for arg in self.args),
-                                    (", " if self.args and self.kwargs else "") +
-                                    ", ".join("{0}={1}".format(name, val.as_source_code())
-                                              for name, val in self.kwargs.items())
-                                    )
+        return "{0}{1}".format(self.function_name,
+                               "".join(" " + arg.as_source_code() for arg in self.args),
+                               )
 
     def simplify(self, changes):
         self.args = [arg.simplify(changes) for arg in self.args]
@@ -547,19 +532,25 @@ class DictLookup(Expression):
 ObjectCreation = FunctionCall
 
 
-class Verbatim(Expression):
-    def __init__(self, code):
-        self.code = code
-
-    def as_source_code(self):
-        return self.code
-
-
 class NoneExpr(Expression):
     type = type(None)
 
     def as_source_code(self):
         return "None"
+
+
+class TrueExpr(Expression):
+    type = bool
+
+    def as_source_code(self):
+        return "True"
+
+
+class FalseExpr(Expression):
+    type = bool
+
+    def as_source_code(self):
+        return "False"
 
 
 class SetBreakpoint(Statement):
@@ -590,6 +581,7 @@ def infix_operator(operator, return_type):
 
 Equals = infix_operator("==", bool)
 Or = infix_operator("or", bool)
+Add = infix_operator("+", int)
 
 
 def indent(text):

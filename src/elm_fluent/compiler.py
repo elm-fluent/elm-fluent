@@ -4,7 +4,6 @@ import contextlib
 from collections import OrderedDict
 
 import attr
-import babel
 import six
 from fluent.syntax.ast import (Attribute, AttributeExpression, BaseNode, CallExpression, Message, MessageReference,
                                NumberLiteral, Pattern, Placeable, SelectExpression, StringLiteral, Term, TermReference,
@@ -36,11 +35,11 @@ BUILTIN_RETURN_TYPES = {
 }
 
 
-MESSAGE_ARGS_NAME = "message_args"
-ERRORS_NAME = "errors"
-MESSAGE_FUNCTION_ARGS = [MESSAGE_ARGS_NAME, ERRORS_NAME]
+# Choose names with final underscores to avoid clashes with message IDs
+MESSAGE_ARGS_NAME = "args__"
+LOCALE_ARG_NAME = "locale__"
+MESSAGE_FUNCTION_ARGS = [MESSAGE_ARGS_NAME, LOCALE_ARG_NAME]
 
-LOCALE_NAME = "locale"
 
 PLURAL_FORM_FOR_NUMBER_NAME = 'plural_form_for_number'
 
@@ -70,7 +69,6 @@ class CompilerEnvironment(object):
     errors = attr.ib(factory=list)
     functions = attr.ib(factory=dict)
     function_renames = attr.ib(factory=dict)
-    debug = attr.ib(default=False)
     functions_arg_spec = attr.ib(factory=dict)
     message_ids_to_ast = attr.ib(factory=dict)
     term_ids_to_ast = attr.ib(factory=dict)
@@ -93,11 +91,11 @@ class CompilerEnvironment(object):
         self.current = old_current
 
 
-def compile_messages(messages, locale, use_isolating=True, functions=None, debug=False):
+def compile_messages(messages, locale, use_isolating=True, functions=None):
     """
-    Compile a dictionary of {id: Message/Term objects} to a Python module,
+    Compile a dictionary of {id: Message/Term objects} to an Elm module,
     and returns a tuple:
-       (dictionary mapping the message IDs to Python functions,
+       (dictionary mapping the message IDs to Elm functions,
         error list)
 
     The error list is itself a list of two tuples:
@@ -108,8 +106,7 @@ def compile_messages(messages, locale, use_isolating=True, functions=None, debug
     module, message_mapping, module_globals, errors = messages_to_module(
         messages, locale,
         use_isolating=use_isolating,
-        functions=functions,
-        debug=debug)
+        functions=functions)
     # TODO - it would be nice to be able to get back to FTL source file lines,
     # if were knew what they were, and pass absolute filename that to 'compile'
     # builtin as the filepath. Instead of that just use 'exec' for now.
@@ -124,7 +121,7 @@ def compile_messages(messages, locale, use_isolating=True, functions=None, debug
     return (retval, errors)
 
 
-def messages_to_module(messages, locale, use_isolating=True, functions=None, debug=False):
+def messages_to_module(messages, locale, use_isolating=True, functions=None):
     """
     Compile a set of messages to a Python module, returning a tuple:
     (Python source code as a string, dictionary mapping message IDs to Python functions)
@@ -139,18 +136,15 @@ def messages_to_module(messages, locale, use_isolating=True, functions=None, deb
         locale=locale,
         use_isolating=use_isolating,
         functions=functions,
-        debug=debug,
         functions_arg_spec={name: inspect_function_args(func)
                             for name, func in functions.items()},
         message_ids_to_ast=message_ids_to_ast,
         term_ids_to_ast=term_ids_to_ast,
     )
-    # Setup globals, and reserve names for them
     module_globals = {
+
         # TODO - our module level imports
     }
-    # TODO - Elm builtins
-    # module_globals.update(six.moves.builtins.__dict__)
 
     # Return types of known functions.
     known_return_types = {}
@@ -158,18 +152,6 @@ def messages_to_module(messages, locale, use_isolating=True, functions=None, deb
     # TODO - return types of our module level imports
     # known_return_types.update(runtime.RETURN_TYPES)
 
-    # Plural form function
-    plural_form_for_number_main = babel.plural.to_python(locale.plural_form)
-
-    def plural_form_for_number(number):
-        try:
-            return plural_form_for_number_main(number)
-        except TypeError:
-            # This function can legitimately be passed strings if we incorrectly
-            # guessed it was a CLDR category. So we ignore silently
-            return None
-
-    module_globals[PLURAL_FORM_FOR_NUMBER_NAME] = plural_form_for_number
     known_return_types[PLURAL_FORM_FOR_NUMBER_NAME] = text_type
 
     def get_name_properties(name):
@@ -182,7 +164,6 @@ def messages_to_module(messages, locale, use_isolating=True, functions=None, deb
     for k in module_globals:
         name = module.reserve_name(k,
                                    properties=get_name_properties(k),
-                                   is_builtin=k in six.moves.builtins.__dict__
                                    )
         # We should have chosen all our module_globals to avoid name conflicts:
         assert name == k, "Expected {0}=={1}".format(name, k)
@@ -263,8 +244,7 @@ def message_function_name_for_msg_id(msg_id):
 def compile_message(msg, msg_id, function_name, module, compiler_env):
     msg_func = codegen.Function(parent_scope=module,
                                 name=function_name,
-                                args=MESSAGE_FUNCTION_ARGS,
-                                debug=compiler_env.debug)
+                                args=MESSAGE_FUNCTION_ARGS)
 
     if contains_reference_cycle(msg, msg_id, compiler_env):
         error = FluentCyclicReferenceError("Cyclic reference in {0}".format(msg_id))
@@ -425,7 +405,7 @@ def compile_expr_pattern(pattern, local_scope, parent_expr, compiler_env):
             parts.append(codegen.String(PDI))
 
     # > ''.join($[p for p in parts])
-    return codegen.StringJoin([finalize_expr_as_string(p, local_scope, compiler_env) for p in parts])
+    return codegen.Concat([finalize_expr_as_string(p, local_scope, compiler_env) for p in parts])
 
 
 @compile_expr.register(TextElement)
@@ -516,7 +496,6 @@ def make_fluent_none(name, local_scope):
     # > FluentNone()
     return codegen.ObjectCreation('FluentNone',
                                   [codegen.String(name)] if name else [],
-                                  {},
                                   local_scope)
 
 
@@ -777,7 +756,6 @@ def add_static_msg_error(local_scope, exception):
         local_scope,
         codegen.ObjectCreation(exception.__class__.__name__,
                                [codegen.String(exception.args[0])],
-                               {},
                                local_scope))
 
 
