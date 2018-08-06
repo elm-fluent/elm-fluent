@@ -1,0 +1,22 @@
+{
+    "version": "1.0.0",
+    "summary": "Helpers for elm-fluent, an internationalization solution",
+    "repository": "https://github.com/elm-fluent/elm-fluent.git",
+    "license": "BSD3",
+    "source-directories": [
+        "elm_src"
+    ],
+    "exposed-modules": ["Fluent"],
+    "dependencies": {
+        "elm-lang/core": "5.1.1 <= v < 6.0.0",
+        "elm-lang/html": "2.0.0 <= v < 3.0.0",
+        "thetalecrafter/elm-intl": "2.0.0 <= v < 3.0.0"
+    },
+    "dependency-sources": {
+        "thetalecrafter/elm-intl": {
+            "url": "git@github.com:elm-fluent/elm-intl",
+            "ref": "master"
+        }
+    },
+    "elm-version": "0.18.0 <= v < 0.19.0"
+}

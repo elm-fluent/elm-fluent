@@ -104,3 +104,9 @@ ENV/
 
 # Elm
 elm-stuff/
+
+tests/test_project/index.html
+tests/test_project/main.js
+tests/test_project/elm.js
+tests/test_project/Ftl/*
+

@@ -3,7 +3,7 @@
 
 """The setup script."""
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 with open('README.rst') as readme_file:
     readme = readme_file.read()
@@ -15,6 +15,7 @@ requirements = [
     'Click>=6.0',
     'fluent>=0.8.0',
     'attrs>=18',
+    'language-tags>=0.4.4',
 ]
 
 setup_requirements = []

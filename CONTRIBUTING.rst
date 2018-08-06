@@ -84,7 +84,7 @@ Ready to contribute? Here's how to set up `elm_fluent` for local development.
 
   And then install things into it::
 
-    $ npm install -g elm
+    $ npm install -g elm elm-test elm-github-install
 
 4. Create a branch for local development::
 
@@ -96,7 +96,7 @@ Ready to contribute? Here's how to set up `elm_fluent` for local development.
    tests, including testing other Python versions with tox::
 
     $ flake8 elm_fluent tests
-    $ python setup.py test or py.test
+    $ ./runtests.py
     $ tox
 
    To get flake8 and tox, just pip install them into your virtualenv.

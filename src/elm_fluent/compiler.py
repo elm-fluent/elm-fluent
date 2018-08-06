@@ -5,14 +5,14 @@ from collections import OrderedDict
 
 import attr
 import six
-from fluent.syntax.ast import (Attribute, AttributeExpression, BaseNode, CallExpression, Message, MessageReference,
-                               NumberLiteral, Pattern, Placeable, SelectExpression, StringLiteral, Term, TermReference,
-                               TextElement, VariableReference, VariantExpression, VariantList, VariantName)
+from fluent.syntax import FluentParser, ast
 
-from . import codegen
-from .exceptions import FluentCyclicReferenceError, FluentReferenceError
-from .types import FluentDate, FluentNumber, FluentType
-from .utils import args_match, inspect_function_args, numeric_to_native
+from . import codegen, exceptions, types
+from .stubs import (defaults as dtypes, intl_datetimeformat, intl_numberformat,
+                    intl_pluralrules,)
+from .stubs.defaults import default_imports
+from .stubs.fluent import FluentDate, FluentNumber, module as fluent_module
+from .stubs.intl_locale import Locale, module as intl_locale_module
 
 try:
     from functools import singledispatch
@@ -26,32 +26,17 @@ text_type = six.text_type
 FSI = "\u2068"
 PDI = "\u2069"
 
-BUILTIN_NUMBER = 'NUMBER'
-BUILTIN_DATETIME = 'DATETIME'
-
-BUILTIN_RETURN_TYPES = {
-    BUILTIN_NUMBER: FluentNumber,
-    BUILTIN_DATETIME: FluentDate,
-}
-
 
 # Choose names with final underscores to avoid clashes with message IDs
-MESSAGE_ARGS_NAME = "args__"
-LOCALE_ARG_NAME = "locale__"
-MESSAGE_FUNCTION_ARGS = [MESSAGE_ARGS_NAME, LOCALE_ARG_NAME]
+MESSAGE_ARGS_NAME = "args_"
+LOCALE_ARG_NAME = "locale_"
+MESSAGE_FUNCTION_ARGS = [LOCALE_ARG_NAME, MESSAGE_ARGS_NAME]
 
 
-PLURAL_FORM_FOR_NUMBER_NAME = 'plural_form_for_number'
+PLURAL_FORM_FOR_NUMBER_NAME = "plural_form_for_number"
 
 
-CLDR_PLURAL_FORMS = set([
-    'zero',
-    'one',
-    'two',
-    'few',
-    'many',
-    'other',
-])
+CLDR_PLURAL_FORMS = set(["zero", "one", "two", "few", "many", "other"])
 
 
 @attr.s
@@ -68,14 +53,16 @@ class CompilerEnvironment(object):
     message_mapping = attr.ib(factory=dict)
     errors = attr.ib(factory=list)
     functions = attr.ib(factory=dict)
-    function_renames = attr.ib(factory=dict)
-    functions_arg_spec = attr.ib(factory=dict)
     message_ids_to_ast = attr.ib(factory=dict)
     term_ids_to_ast = attr.ib(factory=dict)
+    message_source = attr.ib(default=None)
     current = attr.ib(factory=CurrentEnvironment)
 
-    def add_current_message_error(self, error):
-        self.errors.append((self.current.message_id, error))
+    def add_current_message_error(self, error, expr):
+        error.message_source = self.message_source
+        error.error_source = expr
+        error.message_id = self.current.message_id
+        self.errors.append(error)
 
     @contextlib.contextmanager
     def modified(self, **replacements):
@@ -91,82 +78,62 @@ class CompilerEnvironment(object):
         self.current = old_current
 
 
-def compile_messages(messages, locale, use_isolating=True, functions=None):
+def parse_ftl(source):
+    resource = FluentParser().parse(source)
+    messages = OrderedDict()
+    junk = []
+    for item in resource.body:
+        if isinstance(item, ast.Message):
+            messages[item.id.name] = item
+        elif isinstance(item, ast.Term):
+            messages[item.id.name] = item
+        elif isinstance(item, ast.Junk):
+            junk.append(item)
+    return messages, junk
+
+
+def compile_messages(
+    messages_string, locale, message_source=None, module_name=None, use_isolating=True
+):
     """
-    Compile a dictionary of {id: Message/Term objects} to an Elm module,
-    and returns a tuple:
-       (dictionary mapping the message IDs to Elm functions,
-        error list)
+    Compile messages_string to Elm code.
+
+    Returns a tuple:
+       (elm_source,
+        error_list)
+
+    elm_source is None if error_list is not empty.
 
     The error list is itself a list of two tuples:
        (message id, exception object)
     """
-    if functions is None:
-        functions = {}
-    module, message_mapping, module_globals, errors = messages_to_module(
-        messages, locale,
-        use_isolating=use_isolating,
-        functions=functions)
-    # TODO - it would be nice to be able to get back to FTL source file lines,
-    # if were knew what they were, and pass absolute filename that to 'compile'
-    # builtin as the filepath. Instead of that just use 'exec' for now.
-    exec(module.as_source_code(), module_globals)
-    retval = {}
-    for key, val in message_mapping.items():
-        if key.startswith('-'):
-            # term, shouldn't be in publicly available messages
-            continue
-        retval[six.text_type(key)] = module_globals[val]
-
-    return (retval, errors)
-
-
-def messages_to_module(messages, locale, use_isolating=True, functions=None):
     """
     Compile a set of messages to a Python module, returning a tuple:
     (Python source code as a string, dictionary mapping message IDs to Python functions)
     """
-    if functions is None:
-        functions = {}
-
+    messages, junk = parse_ftl(messages_string)
     message_ids_to_ast = OrderedDict(get_message_function_ast(messages))
     term_ids_to_ast = OrderedDict(get_term_ast(messages))
 
     compiler_env = CompilerEnvironment(
         locale=locale,
         use_isolating=use_isolating,
-        functions=functions,
-        functions_arg_spec={name: inspect_function_args(func)
-                            for name, func in functions.items()},
+        functions=FUNCTIONS,
         message_ids_to_ast=message_ids_to_ast,
         term_ids_to_ast=term_ids_to_ast,
+        message_source=message_source,
     )
-    module_globals = {
+    module_imports = [
+        (intl_locale_module, "Locale"),
+        (intl_numberformat.module, "NumberFormat"),
+        (intl_datetimeformat.module, "DateTimeFormat"),
+        (intl_pluralrules.module, "PluralRules"),
+        (fluent_module, "Fluent"),
+    ]
 
-        # TODO - our module level imports
-    }
-
-    # Return types of known functions.
-    known_return_types = {}
-    known_return_types.update(BUILTIN_RETURN_TYPES)
-    # TODO - return types of our module level imports
-    # known_return_types.update(runtime.RETURN_TYPES)
-
-    known_return_types[PLURAL_FORM_FOR_NUMBER_NAME] = text_type
-
-    def get_name_properties(name):
-        properties = {}
-        if name in known_return_types:
-            properties[codegen.PROPERTY_RETURN_TYPE] = known_return_types[name]
-        return properties
-
-    module = codegen.Module()
-    for k in module_globals:
-        name = module.reserve_name(k,
-                                   properties=get_name_properties(k),
-                                   )
-        # We should have chosen all our module_globals to avoid name conflicts:
-        assert name == k, "Expected {0}=={1}".format(name, k)
+    module = codegen.Module(name=module_name)
+    for mod, name in module_imports:
+        module.add_import(mod, name)
 
     # Reserve names for function arguments, so that we always
     # know the name of these arguments without needing to do
@@ -174,31 +141,182 @@ def messages_to_module(messages, locale, use_isolating=True, functions=None):
     for arg in list(MESSAGE_FUNCTION_ARGS):
         module.reserve_function_arg_name(arg)
 
-    # -- User defined names
-    # functions from context
-    for name, func in functions.items():
-        # These might clash, because we can't control what the user passed in,
-        # so we make a record in 'function_renames'
-        assigned_name = module.reserve_name(name, properties=get_name_properties(name))
-        compiler_env.function_renames[name] = assigned_name
-        module_globals[assigned_name] = func
+    # Handle junk
+    for junk_item in junk:
+        err = exceptions.JunkFound(
+            "Junk found: " + "; ".join(a.message for a in junk_item.annotations),
+            junk_item.annotations,
+        )
+        err.message_source = compiler_env.message_source
+        err.error_source = junk_item
+        compiler_env.errors.append(err)
 
     # Pass one, find all the names, so that we can populate message_mapping,
     # which is needed for compilation.
     for msg_id, msg in message_ids_to_ast.items():
+        function_type = types.Function.for_multiple_inputs(
+            [Locale, types.Record()], dtypes.String
+        )
         function_name = module.reserve_name(
-            message_function_name_for_msg_id(msg_id))
+            message_function_name_for_msg_id(msg_id), type=function_type
+        )
+
         compiler_env.message_mapping[msg_id] = function_name
 
+    reverse_message_mapping = {v: k for k, v in compiler_env.message_mapping.items()}
+
+    # == Order of processing ==
+    # Processing order is important to get types correct for the case when
+    # messages call other messages, and later messages constrain the types of
+    # arguments to be non-String.
+    # We preserve source order for the sake of readability.
+    # These two dicts are: {message id: order number}
+    source_order = {msg_id: i for i, msg_id in enumerate(message_ids_to_ast.keys())}
+    processing_order = get_processing_order(message_ids_to_ast)
+    sorted_message_ids = [
+        msg_id
+        for msg_id, i in sorted(processing_order.items(), key=lambda pair: pair[1])
+    ]
+
     # Pass 2, actual compilation
-    for msg_id, msg in message_ids_to_ast.items():
+
+    for msg_id in sorted_message_ids:
+        msg = message_ids_to_ast[msg_id]
         with compiler_env.modified(message_id=msg_id):
             function_name = compiler_env.message_mapping[msg_id]
-            function = compile_message(msg, msg_id, function_name, module, compiler_env)
-            module.add_function(function_name, function)
+
+            # The final function names need to be easily predictable. If we
+            # didn't get what we expected, we must have had some clash, and it
+            # is best to require that the message IDs change. In reality this
+            # would happen very rarely for normal message IDs.
+            expected_message_function_name = message_function_name_for_msg_id(msg_id)
+            if function_name != expected_message_function_name:
+                if expected_message_function_name in codegen.ELM_KEYWORDS:
+                    error_msg = (
+                        "'{0}' is not allowed as a message ID because it "
+                        "clashes with an Elm keyword. "
+                        "Please choose another ID.".format(msg_id)
+                    )
+                elif expected_message_function_name in default_imports.names_in_use():
+                    error_msg = (
+                        "'{0}' is not allowed as a message ID because it "
+                        "clashes with an Elm default import. "
+                        "Please choose another ID.".format(msg_id)
+                    )
+                elif expected_message_function_name in reverse_message_mapping:
+                    error_msg = (
+                        "'{0}' is not allowed as a message ID because it "
+                        "clashes with another message ID - '{1}'. "
+                        "Please choose another ID.".format(
+                            msg_id,
+                            reverse_message_mapping[expected_message_function_name],
+                        )
+                    )
+                else:
+                    raise NotImplementedError(
+                        "{0} not allowed, need good error message for why".format(
+                            expected_message_function_name
+                        )
+                    )
+                compiler_env.add_current_message_error(
+                    exceptions.BadMessageId(error_msg), msg
+                )
+                function = codegen.Function(
+                    parent_scope=module, name=function_name, args=MESSAGE_FUNCTION_ARGS
+                )
+                function.body.value = codegen.CompilationError(dtypes.String)
+            else:
+                function = compile_message(
+                    msg, msg_id, function_name, module, compiler_env
+                )
+            if not isinstance(function, codegen.CompilationError):
+                module.add_function(
+                    function_name, function, source_order=source_order[msg_id]
+                )
 
     module = codegen.simplify(module)
-    return (module, compiler_env.message_mapping, module_globals, compiler_env.errors)
+    return (module, compiler_env.errors)
+
+
+def compile_master(module_name, locales, locale_modules, options):
+    """
+    Compile the master 'Translations' Elm file. For every message, this has a function
+    that despatches to the function from the correct locale.
+    """
+    errors = []
+    module = codegen.Module(name=module_name)
+    module.add_import(intl_locale_module, "Locale")
+    module.add_import(fluent_module, "Fluent")
+    locale_module_local_names = {
+        locale: module_name_for_locale(locale) for locale in locales
+    }
+
+    for locale, locale_module in locale_modules.items():
+        module.add_import(locale_module, locale_module_local_names[locale])
+
+    sub_module_exports = {
+        locale: locale_module.exports
+        for locale, locale_module in locale_modules.items()
+    }
+    for l in locales:
+        if l not in sub_module_exports:
+            sub_module_exports[l] = []
+    all_sub_module_exports = set(
+        [e for exports in sub_module_exports.values() for e in exports]
+    )
+
+    for func_name in all_sub_module_exports:
+        function_type = types.Function.for_multiple_inputs(
+            [Locale, types.Record()], dtypes.String
+        )
+        function_name = module.reserve_name(func_name, type=function_type)
+        assert function_name == func_name, "{0} != {1} unexpectedly".format(
+            function_name, func_name
+        )
+
+        function = codegen.Function(
+            parent_scope=module, name=function_name, args=MESSAGE_FUNCTION_ARGS
+        )
+        locale_tag_expr = function.variables["Locale.toLanguageTag"].apply(
+            function.variables[LOCALE_ARG_NAME]
+        )
+        lower_cased_locale_tag_expr = function.variables["String.toLower"].apply(
+            locale_tag_expr
+        )
+        case_expr = codegen.Case(lower_cased_locale_tag_expr, parent_scope=function)
+
+        def do_call(l):
+            return function.variables[
+                "{0}.{1}".format(locale_module_local_names[l], func_name)
+            ].apply(*[function.variables[a] for a in MESSAGE_FUNCTION_ARGS])
+
+        for locale in locales:
+            # TODO - different strategies for handling missing message functions
+            # or modules
+            # TODO - warnings for missing messages
+            if locale not in locale_modules:
+                # TODO - what if missing from default?
+                locale_to_use_for_message = options.default_locale
+            else:
+                mod = locale_modules[locale]
+                if func_name not in mod.exports:
+                    locale_to_use_for_message = options.default_locale
+                else:
+                    locale_to_use_for_message = locale
+            branch = case_expr.add_branch(codegen.String(locale.lower()))
+            branch.value = do_call(locale_to_use_for_message)
+        otherwise_branch = case_expr.add_branch(codegen.Otherwise())
+        otherwise_branch.value = do_call(options.default_locale)
+
+        function.body.value = case_expr
+        module.add_function(function_name, function)
+
+    codegen.simplify(module)
+    return (module, errors)
+
+
+def module_name_for_locale(locale_name):
+    return locale_name.replace("-", "").upper()
 
 
 def get_message_function_ast(message_dict):
@@ -206,7 +324,7 @@ def get_message_function_ast(message_dict):
         if msg.value is None:
             # No body, skip it.
             pass
-        elif isinstance(msg, Term):
+        elif isinstance(msg, ast.Term):
             pass
         else:
             yield (msg_id, msg)
@@ -219,7 +337,7 @@ def get_term_ast(message_dict):
         if term.value is None:
             # No body, skip it.
             pass
-        elif isinstance(term, Message):
+        elif isinstance(term, ast.Message):
             pass
         else:
             yield (term_id, term)
@@ -238,27 +356,104 @@ def message_id_for_attr_expression(attr_expr):
 def message_function_name_for_msg_id(msg_id):
     # Scope.reserve_name does further sanitising of name, which we don't need to
     # worry about.
-    return msg_id.replace('.', '__').replace('-', '_')
+
+    # Remove '-' and replace with camelCaps
+    parts = msg_id.rstrip("_").rstrip("-").split("-")
+    joined = []
+    for i, part in enumerate(parts):
+        if i > 0:
+            part = part.title()
+        joined.append(part)
+
+    return "".join(joined).replace(".", "_")
 
 
 def compile_message(msg, msg_id, function_name, module, compiler_env):
-    msg_func = codegen.Function(parent_scope=module,
-                                name=function_name,
-                                args=MESSAGE_FUNCTION_ARGS)
+    msg_func = codegen.Function(
+        parent_scope=module, name=function_name, args=MESSAGE_FUNCTION_ARGS
+    )
 
     if contains_reference_cycle(msg, msg_id, compiler_env):
-        error = FluentCyclicReferenceError("Cyclic reference in {0}".format(msg_id))
-        add_static_msg_error(msg_func, error)
-        compiler_env.add_current_message_error(error)
-        return_expression = finalize_expr_as_string(make_fluent_none(None, module), msg_func, compiler_env)
+        error = exceptions.CyclicReferenceError(
+            "Cyclic reference in {0}".format(msg_id)
+        )
+        compiler_env.add_current_message_error(error, msg)
+        return codegen.CompilationError(dtypes.String)
     else:
-        return_expression = compile_expr(msg, msg_func, None, compiler_env)
-    # > return ($return_expression, errors)
-    msg_func.add_return(codegen.Tuple(return_expression, codegen.VariableReference(ERRORS_NAME, msg_func)))
+        return_expression = compile_expr(msg, msg_func.body, compiler_env)
+    msg_func.body.value = return_expression
+    codegen.finalize(msg_func)
     return msg_func
 
 
-def traverse_ast(node, fun, exclude_attributes=None):
+def get_processing_order(message_ids_to_ast):
+    call_graph = {}
+
+    for msg_id, msg in message_ids_to_ast.items():
+        calls = []
+
+        def find_message_calls(node):
+            if not isinstance(node, ast.BaseNode):
+                return
+
+            if isinstance(node, ast.MessageReference):
+                ref = node.id.name
+                if ref in message_ids_to_ast:
+                    calls.append(ref)
+            elif isinstance(node, ast.AttributeExpression):
+                ref = message_id_for_attr_expression(node)
+                if ref in message_ids_to_ast:
+                    calls.append(ref)
+
+        traverse_ast(msg, find_message_calls)
+        call_graph[msg_id] = calls
+
+    processed = []
+    to_process = list(message_ids_to_ast.keys())
+    current_msg_id = None
+    current_msg_id_history = []
+    while to_process:
+        if current_msg_id is None:
+            current_msg_id = to_process[0]
+
+        # Cycle detect:
+        if (current_msg_id, len(to_process)) in current_msg_id_history:
+            # Oops, we've been in the same place before, with the
+            # same amount of remaining work ->  cycle. Can't do ordering.
+            # Other code will detect this, we just exit here.
+            processed.extend(to_process)
+            break
+        current_msg_id_history.append((current_msg_id, len(to_process)))
+
+        called_msg_ids = call_graph[current_msg_id]
+        unprocessed_called_msg_ids = [c for c in called_msg_ids if c in to_process]
+        if not unprocessed_called_msg_ids:
+            processed.append(current_msg_id)
+            to_process.remove(current_msg_id)
+            current_msg_id = None
+        else:
+            current_msg_id = unprocessed_called_msg_ids[0]
+    return {k: i for i, k in enumerate(processed)}
+
+
+STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES = [
+    # Message and Term attributes have already been loaded into the
+    # message_ids_to_ast dict, and we get to their contents via
+    # AttributeExpression
+    (ast.Message, "attributes"),
+    (ast.Term, "attributes"),
+    # We don't recurse into AttributeExpression.ref, which is a
+    # MessageReference, because we have handled the contents of this ref via
+    # the parent AttributeExpression, and we don't want it to be handled as
+    # a standalone MessageReference which would mean something different.
+    (ast.AttributeExpression, "ref"),
+    # for speed
+    (ast.Message, "comment"),
+    (ast.Term, "comment"),
+]
+
+
+def traverse_ast(node, fun, exclude_attributes=STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES):
     """Postorder-traverse this node and apply `fun` to all child nodes.
 
     Traverse this node depth-first applying `fun` to subnodes and leaves.
@@ -270,7 +465,7 @@ def traverse_ast(node, fun, exclude_attributes=None):
 
     def visit(value):
         """Call `fun` on `value` and its descendants."""
-        if isinstance(value, BaseNode):
+        if isinstance(value, ast.BaseNode):
             return traverse_ast(value, fun, exclude_attributes=exclude_attributes)
         if isinstance(value, list):
             return fun(list(map(visit, value)))
@@ -291,30 +486,11 @@ def contains_reference_cycle(msg, msg_id, compiler_env):
     message_ids_to_ast = compiler_env.message_ids_to_ast
     term_ids_to_ast = compiler_env.term_ids_to_ast
 
-    # We exclude recursing into certain attributes, because we already cover
-    # these recursions explicitly by jumping to a subnode for the case of
-    # references.
-    exclude_attributes = [
-        # Message and Term attributes have already been loaded into the message_ids_to_ast dict,
-        # and we get to their contents via AttributeExpression
-        (Message, 'attributes'),
-        (Term, 'attributes'),
-
-        # We don't recurse into AttributeExpression.ref, which is a
-        # MessageReference, because we have handled the contents of this ref via
-        # the parent AttributeExpression, and we don't want it to be handled as
-        # a standalone MessageReference which would mean something different.
-        (AttributeExpression, 'ref'),
-
-        # for speed
-        (Message, 'comment'),
-        (Term, 'comment'),
-    ]
     visited_nodes = set([])
     checks = []
 
     def checker(node):
-        if isinstance(node, BaseNode):
+        if isinstance(node, ast.BaseNode):
             node_id = id(node)
             if node_id in visited_nodes:
                 checks.append(True)
@@ -327,41 +503,34 @@ def contains_reference_cycle(msg, msg_id, compiler_env):
         # different nodes (messages via a runtime function call, terms via
         # inlining), including the fallback strategies that are used.
         sub_node = None
-        if isinstance(node, MessageReference):
+        if isinstance(node, ast.MessageReference):
             ref = node.id.name
             if ref in message_ids_to_ast:
                 sub_node = message_ids_to_ast[ref]
-        elif isinstance(node, TermReference):
+        elif isinstance(node, ast.TermReference):
             ref = node.id.name
             if ref in term_ids_to_ast:
                 sub_node = term_ids_to_ast[ref]
-        elif isinstance(node, AttributeExpression):
+        elif isinstance(node, ast.AttributeExpression):
             ref = message_id_for_attr_expression(node)
             if ref in message_ids_to_ast:
                 sub_node = message_ids_to_ast[ref]
             elif ref in term_ids_to_ast:
                 sub_node = term_ids_to_ast[ref]
-            else:
-                # Compiler falls back to parent ref in this situation
-                parent_ref = node.ref.id.name
-                if parent_ref in message_ids_to_ast:
-                    sub_node = message_ids_to_ast[parent_ref]
-                elif parent_ref in term_ids_to_ast:
-                    sub_node = term_ids_to_ast[parent_ref]
 
         if sub_node is not None:
-            traverse_ast(sub_node, checker, exclude_attributes=exclude_attributes)
+            traverse_ast(sub_node, checker)
             if any(checks):
                 return
 
         return
 
-    traverse_ast(msg, checker, exclude_attributes=exclude_attributes)
+    traverse_ast(msg, checker)
     return any(checks)
 
 
 @singledispatch
-def compile_expr(element, local_scope, parent_expr, compiler_env):
+def compile_expr(element, local_scope, compiler_env):
     """
     Compiles a Fluent expression into a Python one, return
     an object of type codegen.Expression.
@@ -370,138 +539,120 @@ def compile_expr(element, local_scope, parent_expr, compiler_env):
     to be a function that returns a message, or a branch of that
     function.
     """
-    raise NotImplementedError("Cannot handle object of type {0}"
-                              .format(type(element).__name__))
+    raise NotImplementedError(
+        "Cannot handle object of type {0}".format(type(element).__name__)
+    )
 
 
-@compile_expr.register(Message)
-def compile_expr_message(message, local_scope, parent_expr, compiler_env):
-    return compile_expr(message.value, local_scope, message, compiler_env)
+@compile_expr.register(ast.Message)
+def compile_expr_message(message, local_scope, compiler_env):
+    return compile_expr(message.value, local_scope, compiler_env)
 
 
-@compile_expr.register(Term)
-def compile_expr_term(term, local_scope, parent_expr, compiler_env):
-    return compile_expr(term.value, local_scope, term, compiler_env)
+@compile_expr.register(ast.Term)
+def compile_expr_term(term, local_scope, compiler_env):
+    return compile_expr(term.value, local_scope, compiler_env)
 
 
-@compile_expr.register(Attribute)
-def compile_expr_attribute(attribute, local_scope, parent_expr, compiler_env):
-    return compile_expr(attribute.value, local_scope, attribute, compiler_env)
+@compile_expr.register(ast.Attribute)
+def compile_expr_attribute(attribute, local_scope, compiler_env):
+    return compile_expr(attribute.value, local_scope, compiler_env)
 
 
-@compile_expr.register(Pattern)
-def compile_expr_pattern(pattern, local_scope, parent_expr, compiler_env):
+@compile_expr.register(ast.Pattern)
+def compile_expr_pattern(pattern, local_scope, compiler_env):
     parts = []
     subelements = pattern.elements
 
     use_isolating = compiler_env.use_isolating and len(subelements) > 1
 
     for element in pattern.elements:
-        wrap_this_with_isolating = use_isolating and not isinstance(element, TextElement)
+        wrap_this_with_isolating = use_isolating and not isinstance(
+            element, ast.TextElement
+        )
         if wrap_this_with_isolating:
             parts.append(codegen.String(FSI))
-        parts.append(compile_expr(element, local_scope, pattern, compiler_env))
+        parts.append(
+            Stringable(compile_expr(element, local_scope, compiler_env), local_scope)
+        )
         if wrap_this_with_isolating:
             parts.append(codegen.String(PDI))
 
-    # > ''.join($[p for p in parts])
-    return codegen.Concat([finalize_expr_as_string(p, local_scope, compiler_env) for p in parts])
+    return codegen.Concat(parts)
 
 
-@compile_expr.register(TextElement)
-def compile_expr_text(text, local_scope, parent_expr, compiler_env):
+@compile_expr.register(ast.TextElement)
+def compile_expr_text(text, local_scope, compiler_env):
     return codegen.String(text.value)
 
 
-@compile_expr.register(StringLiteral)
-def compile_expr_string_expression(expr, local_scope, parent_expr, compiler_env):
+@compile_expr.register(ast.StringLiteral)
+def compile_expr_string_expression(expr, local_scope, compiler_env):
     return codegen.String(expr.value)
 
 
-@compile_expr.register(NumberLiteral)
-def compile_expr_number_expression(expr, local_scope, parent_expr, compiler_env):
-    number_expr = codegen.Number(numeric_to_native(expr.value))
-    if is_NUMBER_call_expr(parent_expr):
-        # Don't need two calls to NUMBER
-        return number_expr
-    if isinstance(parent_expr, SelectExpression):
-        # Don't need to wrap in NUMBER for either the key expression or
-        # the variant selector.
-        return number_expr
-
-    # > NUMBER($number_expr)
-    return codegen.FunctionCall(BUILTIN_NUMBER,
-                                [number_expr],
-                                {},
-                                local_scope)
+@compile_expr.register(ast.NumberLiteral)
+def compile_expr_number_expression(expr, local_scope, compiler_env):
+    return codegen.Number(numeric_to_native(expr.value))
 
 
-@compile_expr.register(Placeable)
-def compile_expr_placeable(placeable, local_scope, parent_expr, compiler_env):
-    return compile_expr(placeable.expression, local_scope, placeable, compiler_env)
+def numeric_to_native(val):
+    """
+    Given a numeric string (as defined by fluent spec),
+    return an int or float
+    """
+    # val matches this EBNF:
+    #  '-'? [0-9]+ ('.' [0-9]+)?
+    if "." in val:
+        return float(val)
+    else:
+        return int(val)
 
 
-@compile_expr.register(MessageReference)
-def compile_expr_message_reference(reference, local_scope, parent_expr, compiler_env):
+@compile_expr.register(ast.Placeable)
+def compile_expr_placeable(placeable, local_scope, compiler_env):
+    return compile_expr(placeable.expression, local_scope, compiler_env)
+
+
+@compile_expr.register(ast.MessageReference)
+def compile_expr_message_reference(reference, local_scope, compiler_env):
     name = reference.id.name
-    return do_message_call(name, local_scope, parent_expr, compiler_env)
+    return do_message_call(name, local_scope, reference, compiler_env)
 
 
-@compile_expr.register(TermReference)
-def compile_expr_term_reference(reference, local_scope, parent_expr, compiler_env):
+@compile_expr.register(ast.TermReference)
+def compile_expr_term_reference(reference, local_scope, compiler_env):
     name = reference.id.name
     if name in compiler_env.term_ids_to_ast:
         term = compiler_env.term_ids_to_ast[name]
-        return compile_expr(term.value, local_scope, reference, compiler_env)
+        return compile_expr(term.value, local_scope, compiler_env)
     else:
-        error = FluentReferenceError("Unknown term: {0}".format(name))
-        add_static_msg_error(local_scope, error)
-        compiler_env.add_current_message_error(error)
-        return make_fluent_none(name, local_scope)
+        error = exceptions.ReferenceError("Unknown term: {0}".format(name))
+        compiler_env.add_current_message_error(error, reference)
+        return codegen.CompilationError(dtypes.String)
 
 
-def do_message_call(name, local_scope, parent_expr, compiler_env):
+def do_message_call(name, local_scope, expr, compiler_env):
     if name in compiler_env.message_mapping:
-        # Message functions always return strings, so we can type this variable:
-        tmp_name = local_scope.reserve_name('_tmp', properties={codegen.PROPERTY_TYPE: text_type})
         msg_func_name = compiler_env.message_mapping[name]
-        # > $tmp_name = $msg_func_name(message_args, errors)
-        local_scope.add_assignment(
-            (tmp_name, ERRORS_NAME),
-            codegen.FunctionCall(msg_func_name,
-                                 [codegen.VariableReference(a, local_scope) for a in MESSAGE_FUNCTION_ARGS],
-                                 {},
-                                 local_scope))
-
-        # > $tmp_name
-        return codegen.VariableReference(tmp_name, local_scope)
-
+        return local_scope.variables[msg_func_name].apply(
+            *[local_scope.variables[a] for a in MESSAGE_FUNCTION_ARGS]
+        )
     else:
-        return unknown_reference(name, local_scope, compiler_env)
+        return unknown_reference(name, local_scope, expr, compiler_env)
 
 
-def unknown_reference(name, local_scope, compiler_env):
-    if name.startswith('-'):
-        error = FluentReferenceError("Unknown term: {0}".format(name))
+def unknown_reference(name, local_scope, expr, compiler_env):
+    if name.startswith("-"):
+        error = exceptions.ReferenceError("Unknown term: {0}".format(name))
     else:
-        error = FluentReferenceError("Unknown message: {0}".format(name))
-    add_static_msg_error(local_scope, error)
-    compiler_env.add_current_message_error(error)
-    return make_fluent_none(name, local_scope)
+        error = exceptions.ReferenceError("Unknown message: {0}".format(name))
+    compiler_env.add_current_message_error(error, expr)
+    return codegen.CompilationError(dtypes.String)
 
 
-def make_fluent_none(name, local_scope):
-    # > FluentNone(name)
-    # OR
-    # > FluentNone()
-    return codegen.ObjectCreation('FluentNone',
-                                  [codegen.String(name)] if name else [],
-                                  local_scope)
-
-
-@compile_expr.register(AttributeExpression)
-def compile_expr_attribute_expression(attribute, local_scope, parent_expr, compiler_env):
-    parent_id = attribute.ref.id.name
+@compile_expr.register(ast.AttributeExpression)
+def compile_expr_attribute_expression(attribute, local_scope, compiler_env):
     msg_id = message_id_for_attr_expression(attribute)
     # Message attribute
     if msg_id in compiler_env.message_mapping:
@@ -509,30 +660,16 @@ def compile_expr_attribute_expression(attribute, local_scope, parent_expr, compi
     # Term attribute
     elif msg_id in compiler_env.term_ids_to_ast:
         term = compiler_env.term_ids_to_ast[msg_id]
-        return compile_expr(term, local_scope, attribute, compiler_env)
-    # Message fallback to parent
-    elif parent_id in compiler_env.message_mapping:
-        error = FluentReferenceError("Unknown attribute: {0}"
-                                     .format(msg_id))
-        add_static_msg_error(local_scope, error)
-        compiler_env.add_current_message_error(error)
-        return do_message_call(parent_id, local_scope, attribute, compiler_env)
-    # Term fallback to parent
-    elif parent_id in compiler_env.term_ids_to_ast:
-        term = compiler_env.term_ids_to_ast[parent_id]
-        error = FluentReferenceError("Unknown attribute: {0}"
-                                     .format(msg_id))
-        add_static_msg_error(local_scope, error)
-        compiler_env.add_current_message_error(error)
-        return compile_expr(term, local_scope, attribute, compiler_env)
-    # Final fallback
+        return compile_expr(term, local_scope, compiler_env)
+    # Missing
     else:
-        return unknown_reference(msg_id, local_scope, compiler_env)
+        return unknown_reference(msg_id, local_scope, attribute, compiler_env)
 
 
-@compile_expr.register(VariantList)
-def compile_expr_variant_list(variant_list, local_scope, parent_expr, compiler_env,
-                              selected_key=None, term_id=None):
+@compile_expr.register(ast.VariantList)
+def compile_expr_variant_list(
+    variant_list, local_scope, compiler_env, selected_key=None, term_id=None
+):
     default = None
     found = None
     for variant in variant_list.variants:
@@ -544,224 +681,504 @@ def compile_expr_variant_list(variant_list, local_scope, parent_expr, compiler_e
     if found is None:
         found = default
         if selected_key is not None:
-            error = FluentReferenceError("Unknown variant: {0}[{1}]"
-                                         .format(term_id,
-                                                 selected_key.name))
-            add_static_msg_error(local_scope, error)
-            compiler_env.add_current_message_error(error)
-    return compile_expr(found.value, local_scope, variant_list, compiler_env)
+            error = exceptions.ReferenceError(
+                "Unknown variant: {0}[{1}]".format(term_id, selected_key.name)
+            )
+            compiler_env.add_current_message_error(error, selected_key)
+            return codegen.CompilationError(dtypes.String)
+    return compile_expr(found.value, local_scope, compiler_env)
 
 
 def is_cldr_plural_form_key(key_expr):
-    return (isinstance(key_expr, VariantName) and
-            key_expr.name in CLDR_PLURAL_FORMS)
+    return isinstance(key_expr, ast.VariantName) and key_expr.name in CLDR_PLURAL_FORMS
 
 
-@compile_expr.register(SelectExpression)
-def compile_expr_select_expression(select_expr, local_scope, parent_expr, compiler_env):
-    # This is very similar to compile_expr_variant_list, but it is different
-    # enough that implementing them together makes the code rather hard to understand
-    if_statement = codegen.If(local_scope)
-    key_tmp_name = local_scope.reserve_name('_key')
-    key_value = compile_expr(select_expr.selector, local_scope, select_expr, compiler_env)
-    local_scope.add_assignment(key_tmp_name, key_value)
+@compile_expr.register(ast.SelectExpression)
+def compile_expr_select_expression(select_expr, local_scope, compiler_env):
+    selector_value = compile_expr(select_expr.selector, local_scope, compiler_env)
 
-    return_tmp_name = local_scope.reserve_name('_ret')
+    any_numerics = any(
+        isinstance(variant.key, ast.NumberLiteral) for variant in select_expr.variants
+    )
+    all_numerics = all(
+        isinstance(variant.key, ast.NumberLiteral) for variant in select_expr.variants
+    )
+    all_plural_forms = all(
+        is_cldr_plural_form_key(variant.key) for variant in select_expr.variants
+    )
 
-    need_plural_form = any(is_cldr_plural_form_key(variant.key)
-                           for variant in select_expr.variants)
-    if need_plural_form:
-        plural_form_tmp_name = local_scope.reserve_name('_plural_form')
-        plural_form_value = codegen.FunctionCall(PLURAL_FORM_FOR_NUMBER_NAME,
-                                                 [codegen.VariableReference(key_tmp_name, local_scope)],
-                                                 {},
-                                                 local_scope)
-        # > $plural_form_tmp_name = plural_form_for_number($key_tmp_name)
-        local_scope.add_assignment(plural_form_tmp_name, plural_form_value)
+    if any_numerics:
+        numeric_key = True
+    elif all_plural_forms:
+        numeric_key = True
+    else:
+        numeric_key = False
 
-    assigned_types = []
-    for variant in select_expr.variants:
-        if variant.default:
-            # This is default, so gets chosen if nothing else matches, or there
-            # was no requested variant. Therefore we use the final 'else' block
-            # with no condition.
-            block = if_statement.else_block
+    if numeric_key:
+        if isinstance(selector_value, codegen.Number):
+            inferred_key_type = dtypes.Number
         else:
-            # For cases like:
-            #    { $arg ->
-            #       [one] X
-            #       [other] Y
-            #      }
-            # we can't be sure whether $arg is a string, and the 'one' and 'other'
-            # keys are just strings, or whether $arg is a number and we need to
-            # do a plural category comparison. So we have to do both. We can use equality
-            # checks because they implicitly do a type check
-            # > $key_tmp_name == $variant.key
-            condition1 = codegen.Equals(codegen.VariableReference(key_tmp_name, local_scope),
-                                        compile_expr(variant.key, local_scope, select_expr, compiler_env))
+            inferred_key_type = FluentNumber
+    else:
+        inferred_key_type = dtypes.String
 
-            if is_cldr_plural_form_key(variant.key):
-                # > $plural_form_tmp_name == $variant.key
-                condition2 = codegen.Equals(codegen.VariableReference(plural_form_tmp_name, local_scope),
-                                            compile_expr(variant.key, local_scope, select_expr, compiler_env))
-                condition = codegen.Or(condition1, condition2)
+    # TODO - test for what happens here when there is a type mismatch,
+    # possibly wrap in try/catch etc.
+    selector_value.constrain_type(inferred_key_type)
+
+    def get_plural_form(number_val):
+        return local_scope.variables["PluralRules.select"].apply(
+            local_scope.variables["PluralRules.fromLocale"].apply(
+                local_scope.variables[LOCALE_ARG_NAME]
+            ),
+            number_val,
+        )
+
+    mixed = False
+    if numeric_key:
+        if selector_value.type == dtypes.Number:
+            number_val = selector_value
+        elif selector_value.type == FluentNumber:
+            number_val = local_scope.variables["Fluent.numberValue"].apply(
+                selector_value
+            )
+        else:
+            raise NotImplementedError(
+                "Can't handle numeric of type {0}".format(selector_value.type)
+            )
+
+        if all_numerics:
+            case_selector_value = number_val
+        elif all_plural_forms:
+            case_selector_value = get_plural_form(number_val)
+        else:
+            # mixed numerics and plural categories.
+            mixed = True
+
+    else:
+        case_selector_value = selector_value
+
+    if mixed:
+        number_var = local_scope.add_assignment("val_", number_val)
+        plural_form_var = local_scope.add_assignment("pl_", get_plural_form(number_var))
+
+        # series of if/then/else
+        default_value = None
+        total = len(select_expr.variants)
+        retval = codegen.Let(parent_scope=local_scope)
+        previous_else_branch = retval
+        for i, variant in enumerate(select_expr.variants):
+            last = i == total - 1
+            branch_value = compile_expr(variant.value, local_scope, compiler_env)
+            if variant.default:
+                default_value = branch_value
+            if last and variant.default:
+                # Don't need to add a new if with a condition
+                previous_else_branch.value = branch_value
             else:
-                condition = condition1
-            block = if_statement.add_if(condition)
-        assigned_value = compile_expr(variant.value, block, select_expr, compiler_env)
-        block.add_assignment(return_tmp_name, assigned_value)
-        assigned_types.append(assigned_value.type)
+                key_value = compile_expr(variant.key, local_scope, compiler_env)
+                if is_cldr_plural_form_key(variant.key):
+                    condition = codegen.Equals(plural_form_var, key_value)
+                else:
+                    condition = codegen.Equals(number_var, key_value)
 
-    if assigned_types:
-        first_type = assigned_types[0]
-        if all(t == first_type for t in assigned_types):
-            local_scope.set_name_properties(return_tmp_name, {codegen.PROPERTY_TYPE: first_type})
+                if_expr = codegen.If(condition, parent_scope=previous_else_branch)
+                if_expr.true_branch.value = branch_value
+                previous_else_branch.value = if_expr
+                previous_else_branch = if_expr.false_branch
 
-    local_scope.statements.append(if_statement)
-    return codegen.VariableReference(return_tmp_name, local_scope)
+        if previous_else_branch.value is None:
+            previous_else_branch.value = default_value
+        return retval
+    else:
+        case_expr = codegen.Case(case_selector_value, parent_scope=local_scope)
+        # Sort so that default is last.
+        sorted_variants = sorted(
+            select_expr.variants, key=lambda v: 1 if v.default else 0
+        )
+        for variant in sorted_variants:
+            if variant.default:
+                key_value = codegen.Otherwise()
+            else:
+                key_value = compile_expr(variant.key, local_scope, compiler_env)
+
+            # TODO - test for what happens here when there is TypeMismatch
+            # e.g. there is a numeric
+            key_value.type = case_selector_value.type.constrain(key_value.type)
+            branch = case_expr.add_branch(key_value)
+            branch.value = compile_expr(variant.value, branch, compiler_env)
+
+        return case_expr
 
 
-@compile_expr.register(VariantName)
-def compile_expr_variant_name(name, local_scope, parent_expr, compiler_env):
+@compile_expr.register(ast.VariantName)
+def compile_expr_variant_name(name, local_scope, compiler_env):
     # TODO - handle numeric literals here?
     return codegen.String(name.name)
 
 
-@compile_expr.register(VariantExpression)
-def compile_expr_variant_expression(variant_expr, local_scope, parent_expr, compiler_env):
+@compile_expr.register(ast.VariantExpression)
+def compile_expr_variant_expression(variant_expr, local_scope, compiler_env):
     term_id = variant_expr.ref.id.name
     if term_id in compiler_env.term_ids_to_ast:
         term_val = compiler_env.term_ids_to_ast[term_id].value
-        if isinstance(term_val, VariantList):
-            return compile_expr_variant_list(term_val, local_scope, variant_expr, compiler_env,
-                                             selected_key=variant_expr.key,
-                                             term_id=term_id)
+        if isinstance(term_val, ast.VariantList):
+            return compile_expr_variant_list(
+                term_val,
+                local_scope,
+                compiler_env,
+                selected_key=variant_expr.key,
+                term_id=term_id,
+            )
         else:
-            error = FluentReferenceError('Unknown variant: {0}[{1}]'.format(
-                term_id, variant_expr.key.name))
-            add_static_msg_error(local_scope, error)
-            compiler_env.add_current_message_error(error)
-            return compile_expr(term_val, local_scope, variant_expr, compiler_env)
+            error = exceptions.ReferenceError(
+                "Unknown variant: {0}[{1}]".format(term_id, variant_expr.key.name)
+            )
+            compiler_env.add_current_message_error(error, variant_expr)
+            return codegen.CompilationError(dtypes.String)
     else:
-        error = FluentReferenceError("Unknown term: {0}".format(term_id))
-        add_static_msg_error(local_scope, error)
-        compiler_env.add_current_message_error(error)
-        return make_fluent_none(term_id, local_scope)
+        error = exceptions.ReferenceError("Unknown term: {0}".format(term_id))
+        compiler_env.add_current_message_error(error, variant_expr)
+        return codegen.CompilationError(dtypes.String)
 
 
-@compile_expr.register(VariableReference)
-def compile_expr_external_argument(argument, local_scope, parent_expr, compiler_env):
+@compile_expr.register(ast.VariableReference)
+def compile_expr_variable_reference(argument, local_scope, compiler_env):
     name = argument.id.name
-    tmp_name = local_scope.reserve_name('_tmp')
-    try_catch = codegen.TryCatch(codegen.VariableReference("LookupError", local_scope), local_scope)
-    # Try block
-    # > $tmp_name = message_args[$name]
-    try_catch.try_block.add_assignment(
-        tmp_name,
-        codegen.DictLookup(codegen.VariableReference(MESSAGE_ARGS_NAME, local_scope),
-                           codegen.String(name)))
-    # Except block
-    add_static_msg_error(try_catch.except_block, FluentReferenceError("Unknown external: {0}".format(name)))
-    # > $tmp_name = FluentNone("$name")
-    try_catch.except_block.add_assignment(
-        tmp_name,
-        make_fluent_none(name, local_scope))
-
-    # Else block
-
-    # In a select expression, we only care about matching against a
-    # selector, not the other things (like wrapping in fluent_number, which is
-    # expensive). So we miss that out if possible.
-    add_handle_argument = not isinstance(parent_expr, SelectExpression)
-    if add_handle_argument:
-        # > $tmp_name = handle_argument($tmp_name, "$name", locale, errors)
-        try_catch.else_block.add_assignment(
-            tmp_name,
-            codegen.FunctionCall("handle_argument",
-                                 [codegen.VariableReference(tmp_name, local_scope),
-                                  codegen.String(name),
-                                  codegen.VariableReference(LOCALE_NAME, local_scope),
-                                  codegen.VariableReference(ERRORS_NAME, local_scope)],
-                                 {},
-                                 local_scope))
-
-    local_scope.statements.append(try_catch)
-    return codegen.VariableReference(tmp_name, local_scope)
+    # TODO - some kind of sanitising on the argument name
+    args_var = local_scope.variables[MESSAGE_ARGS_NAME]
+    arg = codegen.AttributeReference(args_var, name)
+    return arg
 
 
-@compile_expr.register(CallExpression)
-def compile_expr_call_expression(expr, local_scope, parent_expr, compiler_env):
+@compile_expr.register(ast.CallExpression)
+def compile_expr_call_expression(expr, local_scope, compiler_env):
     function_name = expr.callee.name
 
     if function_name in compiler_env.functions:
-        args = [compile_expr(arg, local_scope, expr, compiler_env) for arg in expr.positional]
-        kwargs = {kwarg.name.name: compile_expr(kwarg.value, local_scope, expr, compiler_env) for kwarg in expr.named}
-        match, error = args_match(function_name, args, kwargs, compiler_env.functions_arg_spec[function_name])
+        function_spec = compiler_env.functions[function_name]
+        args = [compile_expr(arg, local_scope, compiler_env) for arg in expr.positional]
+        kwargs = {
+            kwarg.name.name: compile_expr(kwarg.value, local_scope, compiler_env)
+            for kwarg in expr.named
+        }
+        match, error = args_match(function_spec, args, kwargs)
         if match:
-            function_name_in_module = compiler_env.function_renames[function_name]
-            return codegen.FunctionCall(function_name_in_module, args, kwargs, local_scope)
+            return function_spec.compile(args, kwargs, local_scope)
         else:
-            add_static_msg_error(local_scope, error)
-            compiler_env.add_current_message_error(error)
-            return make_fluent_none(function_name + "()", local_scope)
+            compiler_env.add_current_message_error(error, expr)
+            return codegen.CompilationError(dtypes.String)
 
     else:
-        error = FluentReferenceError("Unknown function: {0}"
-                                     .format(function_name))
-        add_static_msg_error(local_scope, error)
-        compiler_env.add_current_message_error(error)
-        return make_fluent_none(function_name + "()", local_scope)
+        error = exceptions.ReferenceError("Unknown function: {0}".format(function_name))
+        compiler_env.add_current_message_error(error, expr)
+        return codegen.CompilationError(dtypes.String)
 
 
-def finalize_expr_as_string(python_expr, scope, compiler_env):
+def args_match(function_spec, args, kwargs):
     """
-    Wrap an outputted Python expression with code to ensure that it will return
-    a string.
-    """
-    if issubclass(python_expr.type, text_type):
-        return python_expr
-    elif issubclass(python_expr.type, FluentType):
-        # > $python_expr.format(locale)
-        return codegen.MethodCall(python_expr,
-                                  'format',
-                                  [codegen.VariableReference(LOCALE_NAME, scope)],
-                                  expr_type=text_type)
-    else:
-        # > handle_output($python_expr, locale, errors)
-        return codegen.FunctionCall('handle_output',
-                                    [python_expr,
-                                     codegen.VariableReference(LOCALE_NAME, scope),
-                                     codegen.VariableReference(ERRORS_NAME, scope)],
-                                    {},
-                                    scope,
-                                    expr_type=text_type)
+    Returns a tuple indicating whether the passed in args tuple and kwargs dict
+    match the `function_spec` provided.
 
+    For a match, returns a tuple
+       (True, None)
 
-def is_NUMBER_call_expr(expr):
-    """
-    Returns True if the object is a FTL ast.CallExpression representing a call to NUMBER
-    """
-    return (isinstance(expr, CallExpression) and
-            expr.callee.name == 'NUMBER')
-
-
-def add_static_msg_error(local_scope, exception):
-    """
-    Given a scope and an exception object, inspect the object and add the code
-    to the scope needed to create and add that exception to the returned errors
-    list.
+    For a non-match, returns a tuple
+       (False, TypeError instance)
 
     """
-    return add_msg_error_with_expr(
-        local_scope,
-        codegen.ObjectCreation(exception.__class__.__name__,
-                               [codegen.String(exception.args[0])],
-                               local_scope))
+    if not all(kw in function_spec.keyword_args for kw in kwargs):
+        return (
+            False,
+            exceptions.FunctionParameterError(
+                "{0}() got an unexpected keyword argument '{1}'".format(
+                    function_spec.name,
+                    six.next(kw for kw in kwargs if kw not in function_spec.keyword_args),
+                )
+            ),
+        )
+    if not function_spec.positional_args == len(args):
+        return (
+            False,
+            exceptions.FunctionParameterError(
+                "{0}() takes {1} positional argument(s) but {2} were given".format(
+                    function_spec.name, function_spec.positional_args, len(args)
+                )
+            ),
+        )
+
+    return (True, None)
 
 
-def add_msg_error_with_expr(local_scope, exception_expr):
-    local_scope.statements.append(
-        codegen.MethodCall(
-            codegen.VariableReference(ERRORS_NAME, local_scope),
-            "append",
-            [exception_expr]))
+class Stringable(codegen.Expression):
+    # A kind of 'flexi' expression for args that will convert itself to
+    # NumberFormat.format/DateTimeFormat.format calls when you call finalize(),
+    # if the arg turned out to be numeric or a datetime
+    def __init__(self, expr, local_scope):
+        self.expr = expr
+        self.local_scope = local_scope
+        self._finalized_expr = None
+        self._assigned_types = []
+
+    @property
+    def type(self):
+        return dtypes.String
+
+    @type.setter
+    def type(self, type_obj):
+        self._assigned_types.append(type_obj)
+
+    def sub_expressions(self):
+        yield self.expr
+
+    def finalize(self):
+        if self._finalized_expr is not None:
+            return
+        assert all(t == dtypes.String for t in self._assigned_types)
+        if self.expr.type == dtypes.String:
+            # Underlying type is also string, no more to do
+            self._finalized_expr = self.expr
+        elif isinstance(self.expr.type, types.UnconstrainedType):
+            # Constrain in last line
+            self._finalized_expr = self.expr
+        elif self.expr.type == dtypes.Number:
+            self._finalized_expr = self.local_scope.variables[
+                "NumberFormat.format"
+            ].apply(
+                self.local_scope.variables["NumberFormat.fromLocale"].apply(
+                    self.local_scope.variables[LOCALE_ARG_NAME]
+                ),
+                self.expr,
+            )
+        elif self.expr.type == FluentNumber:
+            self._finalized_expr = self.local_scope.variables[
+                "Fluent.formatNumber"
+            ].apply(self.local_scope.variables[LOCALE_ARG_NAME], self.expr)
+        elif self.expr.type == FluentDate:
+            self._finalized_expr = self.local_scope.variables[
+                "Fluent.formatDate"
+            ].apply(self.local_scope.variables[LOCALE_ARG_NAME], self.expr)
+        else:
+            raise NotImplementedError(
+                "Don't know how to finalize object {0} of type {1}".format(
+                    self.expr, self.expr.type
+                )
+            )
+        self._finalized_expr.constrain_type(dtypes.String)
+
+    def as_source_code(self):
+        assert self._finalized_expr is not None, "Need to call 'finalize' first"
+        return self._finalized_expr.as_source_code()
+
+    def simplify(self, changes):
+        assert self._finalized_expr is not None, "Need to call 'finalize' first"
+        return self._finalized_expr.simplify(changes)
+
+
+# --- Functions ---
+
+
+class FluentFunction(object):
+    pass
+
+
+def bool_parameter(name, param_value, local_scope):
+    if not isinstance(param_value, codegen.Number):
+        # TODO test this branch
+        raise exceptions.TypeMismatch(
+            "Expecting a number (0 or 1) for {0} parameter, "
+            "got {1}".format(name, repr(param_value))
+        )
+    return dtypes.Bool.False_ if param_value.number == 0 else dtypes.Bool.True_
+
+
+def maybe_bool_parameter(name, param_value, local_scope):
+    return dtypes.Maybe.Just.apply(bool_parameter(name, param_value, local_scope))
+
+
+def int_parameter(name, param_value, local_scope):
+    if not isinstance(param_value, codegen.Number):
+        # TODO test this branch.
+        raise exceptions.TypeMismatch(
+            "Expecting a number for {0} parameter, "
+            "got {1}".format(repr(name, param_value))
+        )
+    return param_value
+
+
+def maybe_int_parameter(name, param_value, local_scope):
+    return dtypes.Maybe.Just.apply(int_parameter(name, param_value, local_scope))
+
+
+def enum_parameter(enum_type, mapping):
+    def parameter_handler(param_name, param_value, local_scope):
+        if not isinstance(param_value, codegen.String):
+            # TODO test this branch
+            raise exceptions.TypeMismatch(
+                "Expecting a string for {0} parameter, "
+                "got: {1}".format(param_name, repr(param_value))
+            )
+
+        val = param_value.string_value
+
+        if val not in mapping:
+            # TODO test this branch
+            raise exceptions.FunctionParameterError(
+                "Invalid value '{0}' for {1} parameter. "
+                "(Expecting one of {2}".format(
+                    val, param_name, ", ".join(mapping.keys())
+                )
+            )
+
+        enum_type_module = enum_type.module
+        qualifer = local_scope.get_name_qualifier(enum_type_module)
+        full_name = "{0}{1}".format(qualifer, mapping[val])
+        return local_scope.variables[full_name]
+
+    return parameter_handler
+
+
+name_style_parameter = enum_parameter(
+    intl_datetimeformat.NameStyle,
+    {"narrow": "NarrowName", "short": "ShortName", "long": "LongName"},
+)
+
+
+number_style_parameter = enum_parameter(
+    intl_datetimeformat.NumberStyle,
+    {"numeric": "NumericNumber", "2-digit": "TwoDigitNumber"},
+)
+
+
+month_style_parameter = enum_parameter(
+    intl_datetimeformat.MonthStyle,
+    {
+        "narrow": "NarrowMonth",
+        "short": "ShortMonth",
+        "long": "LongMonth",
+        "numeric": "NumericMonth",
+        "2-digit": "TwoDigitMonth",
+    },
+)
+
+
+timezone_style_parameter = enum_parameter(
+    intl_datetimeformat.TimeZoneStyle,
+    {"short": "ShortTimeZone", "long": "LongTimeZone"},
+)
+
+
+currency_display_parameter = enum_parameter(
+    intl_numberformat.CurrencyDisplay,
+    {"symbol": "CurrencySymbol", "code": "CurrencyCode", "name": "CurrencyName"},
+)
+
+
+class DateTimeFunction(FluentFunction):
+    name = "DATETIME"
+    positional_args = 1
+    keyword_args = {
+        "hour12": maybe_bool_parameter,
+        "weekday": name_style_parameter,
+        "era": name_style_parameter,
+        "year": number_style_parameter,
+        "month": month_style_parameter,
+        "day": number_style_parameter,
+        "hour": number_style_parameter,
+        "minute": number_style_parameter,
+        "second": number_style_parameter,
+        "timeZoneName": timezone_style_parameter
+        # "dateStyle",  #  elm-intl doesn't support these yet
+        # "timeStyle",
+    }
+
+    def compile(self, args, kwargs, local_scope):
+        assert len(args) == 1
+        arg = args[0]
+        if not kwargs:
+            # Simply make sure it is a FluentDate
+            arg.constrain_type(FluentDate)
+            # We will do a DateTimeFormat.format later
+            return arg
+        else:
+            options_updates = dict(locale=local_scope.variables[LOCALE_ARG_NAME])
+
+            for kw_name, kw_value in kwargs.items():
+                handler = self.keyword_args[kw_name]
+                options_updates[kw_name] = handler(kw_name, kw_value, local_scope)
+
+            initial_opts = local_scope.add_assignment(
+                "initial_opts_",
+                local_scope.variables["Fluent.dateFormattingOptions"].apply(arg),
+            )
+            options = codegen.RecordUpdate(initial_opts, **options_updates)
+            fdate = local_scope.add_assignment(
+                "fdate_",
+                local_scope.variables["Fluent.reformattedDate"].apply(options, arg),
+            )
+            return fdate
+
+
+class NumberFunction(FluentFunction):
+    name = "NUMBER"
+    positional_args = 1
+    keyword_args = {
+        "currencyDisplay": currency_display_parameter,
+        "useGrouping": bool_parameter,
+        "minimumIntegerDigits": maybe_int_parameter,
+        "minimumFractionDigits": maybe_int_parameter,
+        "maximumFractionDigits": maybe_int_parameter,
+        "minimumSignificantDigits": maybe_int_parameter,
+        "maximumSignificantDigits": maybe_int_parameter,
+    }
+
+    def compile(self, args, kwargs, local_scope):
+
+        assert len(args) == 1
+        arg = args[0]
+        if not kwargs:
+            # If arg is a literal number, leave it as such, we will deal with it
+            # later. This means that hard coded literal numbers don't incur the
+            # overhead of creating NumberFormat objects unless necessary
+            if isinstance(arg, codegen.Number):
+                return arg
+            # Otherwise (external arguments) make it a FluentNumber
+            arg.constrain_type(FluentNumber)
+            # We will do a NumberFormat.format later
+            return arg
+
+        else:
+            options_updates = dict(locale=local_scope.variables[LOCALE_ARG_NAME])
+
+            for kw_name, kw_value in kwargs.items():
+                handler = self.keyword_args[kw_name]
+                options_updates[kw_name] = handler(kw_name, kw_value, local_scope)
+
+            if arg.type == dtypes.Number:
+                default_opts = local_scope.add_assignment(
+                    "defaults_", local_scope.variables["NumberFormat.defaults"]
+                )
+                options = codegen.RecordUpdate(default_opts, **options_updates)
+                fnum = local_scope.add_assignment(
+                    "fnum_",
+                    local_scope.variables["Fluent.formattedNumber"].apply(options, arg),
+                )
+            else:
+                initial_opts = local_scope.add_assignment(
+                    "initial_opts_",
+                    local_scope.variables["Fluent.numberFormattingOptions"].apply(arg),
+                )
+                options = codegen.RecordUpdate(initial_opts, **options_updates)
+                fnum = local_scope.add_assignment(
+                    "fnum_",
+                    local_scope.variables["Fluent.reformattedNumber"].apply(
+                        options, arg
+                    ),
+                )
+            return fnum
+
+
+DateTimeFunction = DateTimeFunction()
+NumberFunction = NumberFunction()
+
+FUNCTIONS = {f.name: f for f in [DateTimeFunction, NumberFunction]}

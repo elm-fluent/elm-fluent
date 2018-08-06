@@ -3,10 +3,13 @@ Utilities for doing Python code generation
 """
 from __future__ import absolute_import, unicode_literals
 
-import keyword
 import re
+from functools import wraps
 
-from six import text_type
+import six
+
+from . import exceptions, types
+
 
 # This module provides simple utilities for building up Elm source code. It
 # implements only what is really needed by compiler.py, with a number of aims
@@ -35,11 +38,6 @@ from six import text_type
 #    consistent and so can predicted easily.
 
 
-PROPERTY_TYPE = 'PROPERTY_TYPE'
-PROPERTY_RETURN_TYPE = 'PROPERTY_RETURN_TYPE'
-UNKNOWN_TYPE = object
-
-
 class ElmAst(object):
     def simplify(self, changes):
         """
@@ -53,14 +51,36 @@ class ElmAst(object):
         """
         return self
 
+    def sub_expressions(self):
+        """
+        Returns an iterable of all syntax nodes contained in this node
+        """
+        raise NotImplementedError(
+            "{0} needs to implement sub_expressions".format(self.__class__)
+        )
+
+    def finalize(self):
+        pass
+
+
+class Variables(object):
+    def __init__(self, scope):
+        self.scope = scope
+
+    def __getitem__(self, item):
+        return VariableReference(item, self.scope)
+
 
 class Scope(ElmAst):
+    is_default_imports = False
+
     def __init__(self, parent_scope=None):
         super(Scope, self).__init__()
         self.parent_scope = parent_scope
         self.names = set()
         self._function_arg_reserved_names = set()
-        self._properties = {}
+        self._types = {}
+        self.variables = Variables(self)
 
     def names_in_use(self):
         names = self.names
@@ -77,7 +97,7 @@ class Scope(ElmAst):
     def all_reserved_names(self):
         return self.names_in_use() | self.function_arg_reserved_names()
 
-    def reserve_name(self, requested, function_arg=False, properties=None):
+    def reserve_name(self, requested, function_arg=False, type=None):
         """
         Reserve a name as being in use in a scope.
 
@@ -85,9 +105,11 @@ class Scope(ElmAst):
         'properties' is an optional dict of additional properties
         (e.g. the type associated with a name)
         """
+
         def _add(final):
             self.names.add(final)
-            self._properties[final] = properties or {}
+            if type is not None:
+                self._types[final] = type
             return final
 
         if function_arg:
@@ -96,8 +118,11 @@ class Scope(ElmAst):
                 return _add(requested)
             else:
                 if requested in self.all_reserved_names():
-                    raise AssertionError("Cannot use '{0}' as argument name as it is already in use"
-                                         .format(requested))
+                    raise AssertionError(
+                        "Cannot use '{0}' as argument name as it is already in use".format(
+                            requested
+                        )
+                    )
 
         cleaned = cleanup_name(requested)
 
@@ -122,119 +147,186 @@ class Scope(ElmAst):
         # names for all function arguments in a separate scope, and insist on
         # the exact names
         if name in self.all_reserved_names():
-            raise AssertionError("Can't reserve '{0}' as function arg name as it is already reserved"
-                                 .format(name))
+            raise AssertionError(
+                "Can't reserve '{0}' as function arg name as it is already reserved".format(
+                    name
+                )
+            )
         self._function_arg_reserved_names.add(name)
 
-    def get_name_properties(self, name):
+    def get_type(self, name):
         """
         Gets a dictionary of properties for the name.
         Raises exception if the name is not reserved in this scope or parent
         """
-        if name in self._properties:
-            return self._properties[name]
+        if name in self._types:
+            return self._types[name]
         else:
-            return self.parent_scope.get_name_properties(name)
+            if self.parent_scope is None:
+                raise KeyError(name)
+            return self.parent_scope.get_type(name)
 
-    def set_name_properties(self, name, props):
+    def set_type(self, name, type):
         """
-        Sets a dictionary of properties for the name.
+        Sets the type for the name.
         Raises exception if the name is not reserved in this scope or parent.
         """
         scope = self
         while True:
-            if name in scope._properties:
-                scope._properties[name].update(props)
+            if name in scope._types:
+                scope._types[name] = type
                 break
             else:
                 scope = scope.parent_scope
 
+    def get_imported_module(self, name):
+        # Chain back until we find a 'Module', which has an implementation
+        # for this.
+        return self.parent_scope.get_imported_module(name)
 
-_IDENTIFIER_SANITIZER_RE = re.compile('[^a-zA-Z0-9_]')
-_IDENTIFIER_START_RE = re.compile('^[a-zA-Z]')
+    def get_name_qualifier(self, module):
+        """
+        For a given module, find the local name of that module in this scope
+        """
+        # Chain back until we a find a 'Module', which has an implementation for this
+        return self.parent_scope.get_name_qualifier(module)
+
+
+_IDENTIFIER_SANITIZER_RE = re.compile("[^a-zA-Z0-9_]")
+_IDENTIFIER_START_RE = re.compile("^[a-zA-Z]")
 
 
 def cleanup_name(name):
     # Choose safe subset of known allowed chars
-    name = _IDENTIFIER_SANITIZER_RE.sub('', name)
+    name = _IDENTIFIER_SANITIZER_RE.sub("", name)
     if not _IDENTIFIER_START_RE.match(name):
         name = "n" + name
     return name
 
 
-# Default imports: see http://package.elm-lang.org/packages/elm-lang/core/latest
-# or https://github.com/elm-lang/core/blob/5.1.1/src/Basics.elm
-ELM_DEFAULT_IMPORTS = set([
-    "max", "min", "Order", "LT", "EQ", "GT", "compare", "not", "&&", "||", "xor",
-    "+", "-", "*", "/", "^", "//", "rem", "%", "negate", "abs", "sqrt", "clamp", "logBase", "e",
-    "pi", "cos", "sin", "tan", "acos", "asin", "atan", "atan2", "round", "floor", "ceiling", "truncate", "toFloat",
-    "degrees", "radians", "turns",
-    "toPolar", "fromPolar",
-    "isNaN", "isInfinite",
-    "toString", "++",
-    "identity", "always", "<|", "|>", "<<", ">>", "flip", "curry", "uncurry", "Never", "never",
-    "List", "::",
-    "Maybe", "Just", "Nothing",
-    "Result", "Ok", "Err",
-    "String",
-    "Tuple",
-    "Debug",
-    "Program",
-    "Cmd", "!",
-    "Sub",
-])
-
 # Keywords: see
 # https://github.com/elm/compiler/blob/master/compiler/src/Parse/Primitives/Keyword.hs#L57
 # However, some seem to be accepted fine as function names, they are only
 # keywords in some positions it seems. These are commented out.
-ELM_KEYWORDS = set([
-    "type",
-    # "alias",
-    "port",
-    "if",
-    "then",
-    "else",
-    "case",
-    "of",
-    "let",
-    "in",
-    "infix",
-    # "left",
-    # "right",
-    # "non",
-    "module",
-    "import",
-    "exposing",
-    "as",
-    "where",
-    # "effect",
-    # "command",
-    # "subscription",
-    # "true",
-    # "false",
-    # "null",
-])
+ELM_KEYWORDS = set(
+    [
+        "type",
+        # "alias",
+        "port",
+        "if",
+        "then",
+        "else",
+        "case",
+        "of",
+        "let",
+        "in",
+        "infix",
+        # "left",
+        # "right",
+        # "non",
+        "module",
+        "import",
+        "exposing",
+        "as",
+        "where",
+        # "effect",
+        # "command",
+        # "subscription",
+        # "true",
+        # "false",
+        # "null",
+    ]
+)
 
 
 class Module(Scope):
-    def __init__(self, parent_scope=None):
-        super(Module, self).__init__(parent_scope=parent_scope)
-        self.statements = []
+    def __init__(self, name=None):
+        from .stubs.defaults import default_imports
+
+        super(Module, self).__init__(parent_scope=default_imports)
+        self.statements = {}  # Dict from statement number to statement
+        self.exports = []
+        self.import_dict = {}  # Map from local name to module
+        self.name = name
+
+    def __repr__(self):
+        return "<Module {0}>".format(self.name)
 
     def all_reserved_names(self):
-        return super(Module, self).all_reserved_names() | ELM_KEYWORDS | ELM_DEFAULT_IMPORTS
+        return super(Module, self).all_reserved_names() | ELM_KEYWORDS
 
-    def add_function(self, func_name, func):
+    def get_imported_module(self, import_name):
+        # Here to avoid circular imports. TODO - more generic mechanism for
+        # default imports, while still avoid circular import problem.
+        if import_name == "String":
+            from .stubs.string import module as string_module
+
+            return string_module
+        return self.import_dict[import_name]
+
+    def get_name_qualifier(self, module):
+        """
+        For a given module, find the qualifer that must be used for that module in this module
+        """
+        from .stubs.defaults import default_imports
+
+        if module is self:
+            return ""
+
+        if module.is_default_imports:
+            # defaults need no qualifiers
+            return ""
+        for name, mod in self.import_dict.items():
+            if mod == module:
+                return name + "."
+        raise LookupError("module {0} not found in {1}".format(module, self))
+
+    def add_function(self, func_name, func, expose=True, source_order=None):
         assert func.func_name == func_name
-        self.statements.append(func)
+        self.exports.append(func_name)
 
-    def as_source_code(self):
-        return "".join(s.as_source_code() + "\n" for s in self.statements)
+        if source_order is None:
+            if not self.statements:
+                source_order = 0
+            else:
+                source_order = max(self.statements.keys()) + 1
+        self.statements[source_order] = func
+
+    def add_import(self, module, name):
+        self.import_dict[name] = module
+
+    def as_source_code(self, include_module_line=True, include_imports=True):
+        lines = []
+        if include_module_line:
+            assert self.name is not None
+            lines.append(
+                "module {0} exposing ({1})\n".format(self.name, ", ".join(self.exports))
+            )
+            lines.append("\n")
+        if include_imports and self.import_dict:
+            for name, module in sorted(
+                self.import_dict.items(), key=lambda pair: pair[1].name
+            ):
+                # We only support 'as' imports, to avoid name conflicts
+                # with functions defined in the module
+                lines.append("import {0} as {1}\n".format(module.name, name))
+            lines.append("\n")
+
+        for s in self.sorted_statements():
+            lines.append(s.as_source_code())
+            # blank line
+            lines.append("\n")
+        return "".join(lines)
+
+    def sorted_statements(self):
+        return [s for i, s in sorted(self.statements.items(), key=lambda pair: pair[0])]
 
     def simplify(self, changes):
-        self.statements = [s.simplify(changes) for s in self.statements]
+        self.statements = {i: s.simplify(changes) for i, s in self.statements.items()}
         return self
+
+    def sub_expressions(self):
+        return self.sorted_statements()
 
 
 class Statement(ElmAst):
@@ -242,71 +334,176 @@ class Statement(ElmAst):
 
 
 class _Assignment(Statement):
-    def __init__(self, names, value):
-        self.names = names
+    def __init__(self, name, value):
+        self.name = name
         self.value = value
 
-    def format_names(self):
-        if len(self.names) == 1:
-            return self.names[0]
-        else:
-            return "({0})".format(", ".join(n for n in self.names))
+    # def format_names(self):
+    #     if len(self.names) == 1:
+    #         return self.names[0]
+    #     else:
+    #         return "({0})".format(", ".join(n for n in self.names))
 
     def as_source_code(self):
-        return "{0} = {1}".format(self.format_names(),
-                                  self.value.as_source_code())
+        return "{0} = {1}".format(self.name, self.value.as_source_code())
 
     def simplify(self, changes):
         self.value = self.value.simplify(changes)
         return self
 
-
-class Block(Scope):
-    def as_source_code(self):
-        if not self.statements:
-            return 'pass\n'
-        else:
-            return super(Block, self).as_source_code()
+    def sub_expressions(self):
+        yield self.value
 
 
 class Function(Scope, Statement):
-    def __init__(self, name, args=None, parent_scope=None,
-                 body=None):
+    def __init__(self, name, args=None, parent_scope=None):
         super(Function, self).__init__(parent_scope=parent_scope)
         self.func_name = name
-        if body is None:
-            body = Let(parent_scope=self)
-        self.body = body
+        self.body = Let(parent_scope=self)
         if args is None:
             args = ()
-        for arg in args:
-            if (arg in parent_scope.names_in_use()):
-                raise AssertionError("Can't use '{0}' as function argument name because it shadows other names"
-                                     .format(arg))
-            self.reserve_name(arg, function_arg=True)
         self.args = args
 
+        # Get the types of the arguments from the registered function type
+        remaining_function_type = self.type
+        for arg in args:
+            if arg in parent_scope.names_in_use():
+                raise AssertionError(
+                    "Can't use '{0}' as function argument name because it shadows other names".format(
+                        arg
+                    )
+                )
+            if remaining_function_type is not None:
+                arg_type = remaining_function_type.input_type
+                remaining_function_type = remaining_function_type.output_type
+            else:
+                arg_type = None
+            self.reserve_name(arg, function_arg=True, type=arg_type)
+
+    @property
+    def type(self):
+        try:
+            return self.parent_scope.get_type(self.func_name)
+        except KeyError:
+            return None
+
+    @type.setter
+    def type(self, type_obj):
+        self.parent_scope.set_type(self.func_name, type_obj.constrain(self.type))
+
+    def sub_expressions(self):
+        yield self.body
+
+    def finalize(self):
+        t = self.type
+        if t is not None:
+            args = self.args
+            output_type = t
+            for a in args:
+                output_type = output_type.output_type
+            self.body.constrain_type(output_type)
+
     def as_source_code(self):
-        return '{0} {1}=\n{2}\n'.format(
-            self.func_name,
-            ''.join(a + ' ' for a in self.args),
-            indent(self.body.as_source_code())
+        if self.parent_scope is None:
+            signature = ""
+        else:
+            try:
+                function_type = self.parent_scope.get_type(self.func_name)
+            except KeyError:
+                signature = ""
+            else:
+                signature = "{name} : {signature}\n".format(
+                    signature=function_type.as_signature(self.parent_scope),
+                    name=self.func_name,
+                )
+        function_def = "{name} {args}=\n{body}".format(
+            name=self.func_name,
+            args="".join(a + " " for a in self.args),
+            body=indent(self.body.as_source_code()),
         )
+        return signature + function_def
 
     def simplify(self, changes):
         self.body = self.body.simplify(changes)
         return self
 
 
+def wrap_exceptions_with_expression_repr(*exceptions):
+    def decorator(expr_method):
+        @wraps(expr_method)
+        def wrapper(expr_self, *args, **kwargs):
+            try:
+                return expr_method(expr_self, *args, **kwargs)
+            except exceptions as e:
+                raise e.__class__(
+                    "In expression: {0} - {1}".format(repr(expr_self), e.args[0])
+                )
+
+        return wrapper
+
+    return decorator
+
+
+wrap_type_mismatch_exceptions_with_expr_repr = wrap_exceptions_with_expression_repr(
+    exceptions.TypeMismatch
+)
+
+
+class fixed_type(object):
+    def __init__(self, type_obj):
+        self.type_obj = type_obj
+
+    def _resolve_type(self):
+        if isinstance(self.type_obj, six.text_type):
+            # To avoid circular imports, we accept a string to represent types
+            # in dtypes
+            from .stubs import defaults as dtypes
+
+            return getattr(dtypes, self.type_obj)
+        else:
+            return self.type_obj
+
+    def __get__(self, obj, objtype):
+        if obj is None:
+            return self
+        else:
+            return self._resolve_type()
+
+    def __set__(self, obj, value):
+        assert value is self._resolve_type()
+        pass
+
+
 class Expression(ElmAst):
     # type represents the Elm type this expression will produce,
-    # if we know it (UNKNOWN_TYPE otherwise).
-    type = UNKNOWN_TYPE
+    # if we know it (UnconstrainedType otherwise).
+    @property
+    def type(self):
+        return types.UnconstrainedType()
+
+    @type.setter
+    def type(self, value):
+        raise NotImplementedError(
+            "{0} does not support setting 'type' (but probably should)".format(
+                self.__class__
+            )
+        )
+
+    @wrap_type_mismatch_exceptions_with_expr_repr
+    def constrain_type(self, type_obj):
+        # TODO handle exceptions
+        self.type = type_obj.constrain(self.type)
+
+    def apply(self, *args):
+        """
+        Function application
+        """
+        return FunctionCall(self, args)
 
 
 class Let(Expression, Scope):
     def __init__(self, parent_scope=None):
-        super(Let, self).__init__(parent_scope=parent_scope)
+        Scope.__init__(self, parent_scope=parent_scope)
         self.value = None
         self.assignments = []
 
@@ -315,26 +512,21 @@ class Let(Expression, Scope):
         assert self.value is not None
         return self.value.type
 
-    def add_assignment(self, names, value):
+    @type.setter
+    def type(self, type_obj):
+        self.value.type = type_obj.constrain(self.value.type)
+
+    def add_assignment(self, name, value):
         """
         Adds an assigment of the form:
 
            x = value
 
-        or
-
-           x, y = value
-
-        Pass a string for the former, a tuple of strings for the later
         """
-        if not isinstance(names, tuple):
-            names = tuple([names])
-
-        for name in names:
-            if name not in self.names_in_use():
-                raise AssertionError("Cannot assign to unreserved name '{0}'".format(name))
-
-        self.assignments.append(_Assignment(names, value))
+        # TODO if needed - assignment from tuples
+        assigned_name = self.reserve_name(name, type=value.type)
+        self.assignments.append(_Assignment(assigned_name, value))
+        return self.variables[name]
 
     def simplify(self, changes):
         self.value = self.value.simplify(changes)
@@ -345,29 +537,52 @@ class Let(Expression, Scope):
             return self.value
         if len(self.assignments) == 1:
             if isinstance(self.value, VariableReference):
-                if [self.value.name] == list(self.assignments[0].names):
+                if self.value.name == self.assignments[0].name:
                     changes.append(True)
                     return self.assignments[0].value
         return self
 
+    def sub_expressions(self):
+        yield from self.assignments
+        yield self.value
+
     def as_source_code(self):
         return "let\n{0}in\n{1}\n".format(
             indent("\n".join(a.as_source_code() for a in self.assignments)),
-            indent(self.value.as_source_code()))
+            indent(self.value.as_source_code()),
+        )
 
 
 class If(Expression):
-    def __init__(self, condition=None, true_branch=None, false_branch=None,
-                 parent_scope=None):
+    def __init__(
+        self, condition=None, true_branch=None, false_branch=None, parent_scope=None
+    ):
         self.condition = condition
         self.true_branch = true_branch or Let(parent_scope=parent_scope)
         self.false_branch = false_branch or Let(parent_scope=parent_scope)
 
+    @property
+    def type(self):
+        # TODO - can we do better than just returning the true branch
+        # Does it matter?
+        return self.true_branch.type
+
+    @type.setter
+    def type(self, type_obj):
+        self.true_branch.type = type_obj.constrain(self.true_branch.type)
+        self.false_branch.type = type_obj.constrain(self.false_branch.type)
+
     def as_source_code(self):
-        return 'if {0} then\n{1}else\n{2}'.format(
+        return "if {0} then\n{1}else\n{2}".format(
             self.condition.as_source_code(),
             indent(self.true_branch.as_source_code()),
-            indent(self.false_branch.as_source_code()))
+            indent(self.false_branch.as_source_code()),
+        )
+
+    def sub_expressions(self):
+        yield self.condition
+        yield self.true_branch
+        yield self.false_branch
 
     def simplify(self, changes):
         self.condition = self.condition.simplify(changes)
@@ -376,32 +591,97 @@ class If(Expression):
         return self
 
 
-class String(Expression):
-    type = text_type
+class Case(Expression):
+    def __init__(self, selector=None, parent_scope=None):
+        self.parent_scope = parent_scope
+        self.selector = selector
+        self.branches = []
+
+    def add_branch(self, matcher):
+        value = Let(self.parent_scope)
+        self.branches.append((matcher, value))
+        return value
+
+    def as_source_code(self):
+        output = []
+        output.append("case {0} of\n".format(self.selector.as_source_code()))
+        for matcher, value in self.branches:
+            output.append(indent("{0} ->".format(matcher.as_source_code())))
+            output.append(indent(indent(value.as_source_code())))
+        return "".join(output)
+
+    @property
+    def type(self):
+        assert len(self.branches) > 0
+        # TODO - can we do better than just returning the first one?
+        # Does it matter?
+        return self.branches[0][1].type
+
+    @type.setter
+    def type(self, type_obj):
+        for m, val in self.branches:
+            val.type = type_obj.constrain(val.type)
+
+    def sub_expressions(self):
+        yield self.selector
+        for matcher, value in self.branches:
+            yield matcher
+            yield value
+
+    def simplify(self, changes):
+        self.selector = self.selector.simplify(changes)
+        self.branches = [
+            (matcher.simplify(changes), value.simplify(changes))
+            for matcher, value in self.branches
+        ]
+        return self
+
+
+class Literal(Expression):
+    def sub_expressions(self):
+        return []
+
+
+class Bracketing(object):
+    """
+    Sentinel class to indicate expression that do their own bracketing
+    so don't need extra parenthesis
+    """
+
+    pass
+
+
+class String(Literal):
+    type = fixed_type("String")
 
     def __init__(self, string_value):
         self.string_value = string_value
 
+    def __repr__(self):
+        return "<String {0}>".format(repr(self.string_value))
+
     def as_source_code(self):
+        # TODO - escapes for some chars?
         return '"{0}"'.format(self.string_value.replace('"', '\\"'))
 
 
-class Number(Expression):
+class Number(Literal):
+    type = fixed_type("Number")
+
     def __init__(self, number):
         self.number = number
-        self.type = type(number)
 
     def as_source_code(self):
+        # TODO - Are there cases where this won't work?
         return repr(self.number)
 
 
-class List(Expression):
+class List(Bracketing, Expression):
     def __init__(self, items):
         self.items = items
-        self.type = list
 
     def as_source_code(self):
-        return '[' + ', '.join(i.as_source_code() for i in self.items) + ']'
+        return "[" + ", ".join(i.as_source_code() for i in self.items) + "]"
 
     def simplify(self, changes):
         self.items = [item.simplify(changes) for item in self.items]
@@ -409,10 +689,21 @@ class List(Expression):
 
 
 class Concat(Expression):
-    type = text_type
+    type = fixed_type("String")
 
     def __init__(self, parts):
         self.parts = parts
+
+    def __repr__(self):
+        return "<Concat {0}>".format(repr(self.parts))
+
+    def sub_expressions(self):
+        return self.parts
+
+    @wrap_type_mismatch_exceptions_with_expr_repr
+    def constrain_type(self, type_obj):
+        for part in self.parts:
+            part.type = type_obj.constrain(part.type)
 
     def as_source_code(self):
         return "String.concat {0}".format(List(self.parts).as_source_code())
@@ -424,21 +715,22 @@ class Concat(Expression):
         # Merge adjacent String objects.
         new_parts = []
         for part in self.parts:
-            if (len(new_parts) > 0 and
-                isinstance(new_parts[-1], String) and
-                    isinstance(part, String)):
-                new_parts[-1] = String(new_parts[-1].string_value +
-                                       part.string_value)
+            if (
+                len(new_parts) > 0
+                and isinstance(new_parts[-1], String)
+                and isinstance(part, String)
+            ):
+                new_parts[-1] = String(new_parts[-1].string_value + part.string_value)
             else:
                 new_parts.append(part)
         if len(new_parts) < len(self.parts):
             changes.append(True)
         self.parts = new_parts
 
-        # See if we eliminate the Concat altogether
+        # See if we can eliminate the Concat altogether
         if len(self.parts) == 0:
             changes.append(True)
-            return String('')
+            return String("")
         elif len(self.parts) == 1:
             changes.append(True)
             return self.parts[0]
@@ -446,151 +738,266 @@ class Concat(Expression):
             return self
 
 
-class Tuple(Expression):
-    type = tuple
-
-    def __init__(self, *items):
-        assert len(items) > 1
-        self.items = items
-
-    def as_source_code(self):
-        return '(' + ", ".join(i.as_source_code() for i in self.items) + ')'
-
-    def simplify(self, changes):
-        self.items = [item.simplify(changes) for item in self.items]
-        return self
-
-
 class VariableReference(Expression):
-    def __init__(self, name, scope):
-        if name not in scope.names_in_use():
-            raise AssertionError("Cannot refer to undefined variable '{0}'".format(name))
+    # Instead of using this directly, normally use
+    # scope.variables[qualified_name] for convenience and readability
+    def __init__(self, qualified_name, scope):
+        super(VariableReference, self).__init__()
+        if "." in qualified_name:
+            module_name, name = qualified_name.split(".")
+        else:
+            module_name = None
+            name = qualified_name
+        if module_name is not None:
+            definition_scope = scope.get_imported_module(module_name)
+        else:
+            definition_scope = scope
+        if name not in definition_scope.names_in_use():
+            raise AssertionError("Cannot refer to undefined name '{0}'".format(name))
+
+        self._definition_scope = definition_scope
+        self.module_name = module_name
         self.name = name
-        self.type = scope.get_name_properties(name).get(PROPERTY_TYPE, UNKNOWN_TYPE)
+
+    @property
+    def type(self):
+        return self._definition_scope.get_type(self.name)
+
+    @type.setter
+    def type(self, type_obj):
+        self._definition_scope.set_type(self.name, type_obj.constrain(self.type))
 
     def as_source_code(self):
-        return self.name
+        return (
+            (self.module_name + ".") if self.module_name is not None else ""
+        ) + self.name
+
+    def sub_expressions(self):
+        return []
+
+    def __repr__(self):
+        return "<VariableReference {0}>".format(self.as_source_code())
+
+
+class AttributeReference(Expression):
+    def __init__(self, variable, attribute_name):
+        self.variable = variable
+        self.attribute_name = attribute_name
+        assert isinstance(variable.type, types.Record)
+        variable.type.add_field(attribute_name)
+
+    @property
+    def type(self):
+        return self.variable.type.fields[self.attribute_name]
+
+    @type.setter
+    def type(self, type_obj):
+        self.variable.type.add_field(self.attribute_name, type_obj)
+
+    def __repr__(self):
+        return "<AttributeReference {0}.{1}>".format(
+            repr(self.variable), self.attribute_name
+        )
+
+    def as_source_code(self):
+        return "{0}.{1}".format(self.variable.as_source_code(), self.attribute_name)
+
+    def sub_expressions(self):
+        yield self.variable
 
 
 class FunctionCall(Expression):
-    def __init__(self, function_name, args, scope, expr_type=UNKNOWN_TYPE):
-        if function_name not in scope.names_in_use():
-            raise AssertionError("Cannot call unknown function '{0}'".format(function_name))
-        self.function_name = function_name
+    # Instead of using this directly, normally use expr.apply()
+    def __init__(self, expr, args):
+        self.expr = expr
         self.args = args
-        if expr_type is UNKNOWN_TYPE:
-            # Try to find out automatically
-            expr_type = scope.get_name_properties(function_name).get(PROPERTY_RETURN_TYPE, expr_type)
-        self.type = expr_type
+        self._type = self.expr.type.apply_args(self.args)
+
+    @property
+    def type(self):
+        return self._type
+
+    @type.setter
+    def type(self, type_obj):
+        # Currently all our functions have fully concrete return types,
+        # so we don't need anything beyond this:
+        assert self.type == type_obj, "Expected {0} == {1}".format(self.type, type_obj)
+
+    def __repr__(self):
+        return "<FunctionCall {0} {1}>".format(
+            self.expr.as_source_code(), " ".join(repr(a) for a in self.args)
+        )
 
     def as_source_code(self):
-        return "{0}{1}".format(self.function_name,
-                               "".join(" " + arg.as_source_code() for arg in self.args),
-                               )
+        return "{0}{1}".format(
+            self.expr.as_source_code(),
+            "".join(" " + parenthesis_wrap(arg) for arg in self.args),
+        )
 
-    def simplify(self, changes):
-        self.args = [arg.simplify(changes) for arg in self.args]
-        self.kwargs = {name: val.simplify(changes) for name, val in self.kwargs.items()}
-        return self
-
-
-class MethodCall(Expression):
-    def __init__(self, obj, method_name, args, expr_type=UNKNOWN_TYPE):
-        # We can't check method_name because we don't know the type of obj yet.
-        self.obj = obj
-        self.method_name = method_name
-        self.args = args
-        self.type = expr_type
-
-    def as_source_code(self):
-        return "{0}.{1}({2})".format(
-            self.obj.as_source_code(),
-            self.method_name,
-            ", ".join(arg.as_source_code() for arg in self.args))
+    def sub_expressions(self):
+        yield self.expr
+        yield from self.args
 
     def simplify(self, changes):
         self.args = [arg.simplify(changes) for arg in self.args]
         return self
 
 
-class DictLookup(Expression):
-    def __init__(self, lookup_obj, lookup_arg, expr_type=UNKNOWN_TYPE):
-        self.lookup_obj = lookup_obj
-        self.lookup_arg = lookup_arg
-        self.type = expr_type
+def parenthesis_wrap(expr):
+    # TODO - may need a better way to determine when we need parentheses, that
+    # respects operator precedence etc. At the moment the following suffices.
+    # Operators do wrapping always to be safe.
+    no_wrapping = isinstance(
+        expr, (Literal, Bracketing, VariableReference, AttributeReference)
+    )
+    if no_wrapping:
+        return expr.as_source_code()
+    else:
+        return "({0})".format(expr.as_source_code())
+
+
+class Otherwise(Expression):
+    def __init__(self):
+        self._type = types.UnconstrainedType()
+
+    @property
+    def type(self):
+        return self._type
+
+    @type.setter
+    def type(self, type_obj):
+        self._type = type_obj.constrain(self._type)
+
+    def sub_expressions(self):
+        return []
 
     def as_source_code(self):
-        return "{0}[{1}]".format(self.lookup_obj.as_source_code(),
-                                 self.lookup_arg.as_source_code())
-
-    def simplify(self, changes):
-        self.lookup_obj = self.lookup_obj.simplify(changes)
-        self.lookup_arg = self.lookup_arg.simplify(changes)
-        return self
+        return "_"
 
 
-ObjectCreation = FunctionCall
+class CompilationError(Expression):
+    def __init__(self, type_obj):
+        self._type = type_obj
 
+    @property
+    def type(self):
+        return self._type
 
-class NoneExpr(Expression):
-    type = type(None)
-
-    def as_source_code(self):
-        return "None"
-
-
-class TrueExpr(Expression):
-    type = bool
+    @type.setter
+    def type(self, type_obj):
+        # Just assign without complaining
+        self._type = type_obj
 
     def as_source_code(self):
-        return "True"
+        # Return something that will definitely cause the Elm code to fail to
+        # compile. Normally the value is not written out anywhere. It exists as
+        # an Expression to allow compilation to continue, so that as many error
+        # messages as possible can be collected instead of quitting early.
+        return "!!!COMPILATION_ERROR!!!"
 
-
-class FalseExpr(Expression):
-    type = bool
-
-    def as_source_code(self):
-        return "False"
-
-
-class SetBreakpoint(Statement):
-    def as_source_code(self):
-        return "import ipdb; ipdb.set_trace()"
+    def sub_expressions(self):
+        return []
 
 
 def infix_operator(operator, return_type):
-    class Op(Expression):
-        type = return_type
+    class Op(Bracketing, Expression):
+        type = fixed_type(return_type)
 
         def __init__(self, left, right):
             self.left = left
             self.right = right
 
         def as_source_code(self):
-            return "({0} {1} {2})".format(self.left.as_source_code(),
-                                          operator,
-                                          self.right.as_source_code())
+            return "({0} {1} {2})".format(
+                self.left.as_source_code(), operator, self.right.as_source_code()
+            )
 
         def simplify(self, changes):
             self.left = self.left.simplify(changes)
             self.right = self.right.simplify(changes)
             return self
 
+        def sub_expressions(self):
+            yield self.left
+            yield self.right
+
     return Op
 
 
-Equals = infix_operator("==", bool)
-Or = infix_operator("or", bool)
-Add = infix_operator("+", int)
+Equals = infix_operator("==", "Bool")
+Add = infix_operator("+", "number")
+
+
+class RecordUpdate(Bracketing, Expression):
+    @property
+    def type(self):
+        return self.var.type
+
+    @type.setter
+    def type(self, type_obj):
+        self.var.type = type_obj.constrain(self.var.type)
+
+    def __init__(self, var, **updates):
+        assert isinstance(
+            var.type, types.Record
+        ), "isinstance({0}, types.Record)".format(var.type)
+        assert isinstance(
+            var, VariableReference
+        ), "isinstance({0}, VariableReference)".format(var)
+        assert (
+            var.module_name is None
+        ), "Record update syntax does not allow qualified name like {0}.{1}".format(
+            var.module_name, var.name
+        )
+        self.var = var
+        self.updates = updates
+        for name, val in updates.items():
+            var.type.add_field(name, val.type)
+
+    def sub_expressions(self):
+        for name, val in self.updates.items():
+            yield val
+
+    def as_source_code(self):
+        return (
+            "{ "
+            + self.var.as_source_code()
+            + " | "
+            + ", ".join(
+                "{0} = {1}".format(name, val.as_source_code())
+                for name, val in sorted(self.updates.items())
+            )
+            + " }"
+        )
 
 
 def indent(text):
-    return ''.join('    ' + l + '\n' for l in text.rstrip('\n').split('\n'))
+    return "".join("    " + l + "\n" for l in text.rstrip("\n").split("\n"))
 
 
 def simplify(source_code):
+    # Can't use 'traverse' for simplify because of the way it needs to change
+    # the actual tree itself.
+    finalize(source_code)
+
     changes = [True]
     while any(changes):
         changes = []
         source_code = source_code.simplify(changes)
     return source_code
+
+
+def traverse(node):
+    sub_parts = node.sub_expressions()
+    for part in sub_parts:
+        yield from traverse(part)
+    yield node
+
+
+def finalize(source_code):
+    for node in traverse(source_code):
+        node.finalize()
+
+
+# Must be at bottom due to cyclic import
+from .stubs import defaults as dtypes  # flake8: noqa  isort:skip

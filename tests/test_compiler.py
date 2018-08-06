@@ -1,585 +1,1017 @@
 from __future__ import absolute_import, unicode_literals
 
 import unittest
-from collections import OrderedDict
 
 import babel
-from fluent.syntax import FluentParser
-from fluent.syntax.ast import Message, Term
 
-from elm_fluent.compiler import messages_to_module
-from elm_fluent.exceptions import FluentCyclicReferenceError, FluentReferenceError
+from elm_fluent import exceptions
+from elm_fluent.compiler import compile_messages
 
-from .utils import dedent_ftl
 from .test_codegen import normalize_elm
-
-# Some TDD tests to help develop CompilingMessageContext. It should be possible to delete
-# the tests here and still have complete test coverage of the compiler.py module, via
-# the other MessageContext.format tests.
+from .utils import dedent_ftl
 
 
-def parse_ftl(source):
-    resource = FluentParser().parse(source)
-    messages = OrderedDict()
-    for item in resource.body:
-        if isinstance(item, Message):
-            messages[item.id.name] = item
-        elif isinstance(item, Term):
-            messages[item.id.name] = item
-    return messages
-
-
-def compile_messages_to_python(source, locale, use_isolating=False):
-    messages = parse_ftl(dedent_ftl(source))
-    module, message_mapping, module_globals, errors = messages_to_module(
-        messages, locale,
-        use_isolating=use_isolating)
-    return module.as_source_code(), errors
+def compile_messages_to_elm(
+    source,
+    locale,
+    module_name=None,
+    include_module_line=False,
+    include_imports=False,
+    use_isolating=False,
+):
+    module, errors = compile_messages(
+        dedent_ftl(source), locale, module_name=module_name, use_isolating=use_isolating
+    )
+    return (
+        module.as_source_code(
+            include_module_line=include_module_line, include_imports=include_imports
+        ),
+        errors,
+    )
 
 
 class TestCompiler(unittest.TestCase):
-    locale = babel.Locale.parse('en_US')
+    locale = babel.Locale.parse("en_US")
 
     maxDiff = None
 
     def assertCodeEqual(self, code1, code2):
-        self.assertEqual(normalize_elm(code1),
-                         normalize_elm(code2))
+        self.assertEqual(normalize_elm(code1), normalize_elm(code2))
 
     def test_single_string_literal(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = Foo
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return ('Foo', errors)
-        """)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "Foo"
+        """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_module_line(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = Foo
+        """,
+            self.locale,
+            module_name="Foo.Bar",
+            include_module_line=True,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            module Foo.Bar exposing (foo)
+
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "Foo"
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_string_literal_in_placeable(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = { "Foo" }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return ('Foo', errors)
-        """)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "Foo"
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_number_literal(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = { 123 }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return (NUMBER(123).format(locale), errors)
-        """)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                NumberFormat.format (NumberFormat.fromLocale locale_) 123
+        """,
+        )
         self.assertEqual(errs, [])
 
-    def test_interpolated_number(self):
-        code, errs = compile_messages_to_python("""
-            foo = x { 123 } y
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return (''.join(['x ', NUMBER(123).format(locale), ' y']), errors)
-        """)
+    def test_inferred_number(self):
+        # From the second instance of $count we know it is numeric,
+        # so it must be treated as numeric in the first
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { $count }, { NUMBER($count) }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
+            foo locale_ args_ =
+                String.concat [Fluent.formatNumber locale_ args_.count, ", ", Fluent.formatNumber locale_ args_.count]
+        """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_inferred_number_from_select(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { $count ->
+               [one]   You have one item
+              *[other] You have { $count } items
+             }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
+            foo locale_ args_ =
+                case PluralRules.select (PluralRules.fromLocale locale_) (Fluent.numberValue args_.count) of
+                    "one" ->
+                        "You have one item"
+                    _ ->
+                        String.concat ["You have ", Fluent.formatNumber locale_ args_.count, " items"]
+        """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_literal_number_in_select(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { 123 ->
+               [one]   You have one item
+              *[other] You have more than one item
+             }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                case PluralRules.select (PluralRules.fromLocale locale_) 123 of
+                    "one" ->
+                        "You have one item"
+                    _ ->
+                        "You have more than one item"
+        """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_inferred_number_from_call(self):
+        code, errs = compile_messages_to_elm(
+            """
+           bar = { NUMBER($count) }
+
+           foo = { $count } - { bar }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            bar : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
+            bar locale_ args_ =
+                Fluent.formatNumber locale_ args_.count
+
+            foo : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
+            foo locale_ args_ =
+                String.concat [Fluent.formatNumber locale_ args_.count, " - ", bar locale_ args_]
+        """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_inferred_number_from_call_reversed(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { bar }
+
+            bar = { $count } - { baz }
+
+            baz = { NUMBER($count) }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
+            foo locale_ args_ =
+                bar locale_ args_
+
+            bar : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
+            bar locale_ args_ =
+                String.concat [Fluent.formatNumber locale_ args_.count, " - ", baz locale_ args_]
+
+            baz : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
+            baz locale_ args_ =
+                Fluent.formatNumber locale_ args_.count
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_message_reference_plus_string_literal(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = Foo
             bar = X { foo }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return ('Foo', errors)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "Foo"
 
-            def bar(message_args, errors):
-                _tmp, errors = foo(message_args, errors)
-                return (''.join(['X ', _tmp]), errors)
-        """)
+            bar : Locale.Locale -> a -> String
+            bar locale_ args_ =
+                String.concat ["X ", foo locale_ args_]
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_single_message_reference(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = Foo
             bar = { foo }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return ('Foo', errors)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "Foo"
 
-            def bar(message_args, errors):
-                return foo(message_args, errors)
-        """)
+            bar : Locale.Locale -> a -> String
+            bar locale_ args_ =
+                foo locale_ args_
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_message_attr_reference(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo
                .attr = Foo Attr
             bar = { foo.attr }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo__attr(message_args, errors):
-                return ('Foo Attr', errors)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo_attr : Locale.Locale -> a -> String
+            foo_attr locale_ args_ =
+                "Foo Attr"
 
-            def bar(message_args, errors):
-                return foo__attr(message_args, errors)
-        """)
+            bar : Locale.Locale -> a -> String
+            bar locale_ args_ =
+                foo_attr locale_ args_
+        """,
+        )
         self.assertEqual(errs, [])
+
+    def test_missing_attr_reference(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = Hello
+               .attr = Foo Attr
+            bar = { foo.baz }
+        """,
+            self.locale,
+        )
+        self.assertEqual(errs[0].message_id, "bar")
+        self.assertEqual(errs[0], exceptions.ReferenceError("Unknown message: foo.baz"))
 
     def test_single_message_reference_reversed_order(self):
         # We should cope with forward references
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             bar = { foo }
             foo = Foo
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def bar(message_args, errors):
-                return foo(message_args, errors)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            bar : Locale.Locale -> a -> String
+            bar locale_ args_ =
+                foo locale_ args_
 
-            def foo(message_args, errors):
-                return ('Foo', errors)
-        """)
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "Foo"
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_single_message_bad_reference(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             bar = { foo }
-        """, self.locale)
-        # We already know that foo does not exist, so we can hard code the error
-        # into the function for the runtime error.
-        self.assertCodeEqual(code, """
-            def bar(message_args, errors):
-                errors.append(FluentReferenceError('Unknown message: foo'))
-                return (FluentNone('foo').format(locale), errors)
-        """)
-        # And we should get a compile time error:
-        self.assertEqual(errs, [('bar', FluentReferenceError("Unknown message: foo"))])
+        """,
+            self.locale,
+        )
+        self.assertIn("COMPILATION_ERROR", code)
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(errs[0].message_id, "bar")
+        self.assertEqual(errs[0], exceptions.ReferenceError("Unknown message: foo"))
 
-    def test_name_collision_function_args(self):
-        code, errs = compile_messages_to_python("""
-            errors = Errors
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def errors2(message_args, errors):
-                return ('Errors', errors)
-        """)
-        self.assertEqual(errs, [])
+    def test_bad_name_keyword(self):
+        code, errs = compile_messages_to_elm(
+            """
+            type = My String
+        """,
+            self.locale,
+        )
+        self.assertIn("COMPILATION_ERROR", code)
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(errs[0].message_id, "type")
+        self.assertEqual(
+            errs[0],
+            exceptions.BadMessageId(
+                "'type' is not allowed as a message ID because it clashes "
+                "with an Elm keyword. Please choose another ID."
+            ),
+        )
 
-    def test_name_collision_builtins(self):
-        code, errs = compile_messages_to_python("""
-            zip = Zip
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def zip2(message_args, errors):
-                return ('Zip', errors)
-        """)
-        self.assertEqual(errs, [])
+    def test_bad_name_default_import(self):
+        code, errs = compile_messages_to_elm(
+            """
+            max = My String
+        """,
+            self.locale,
+        )
+        self.assertIn("COMPILATION_ERROR", code)
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(errs[0].message_id, "max")
+        self.assertEqual(
+            errs[0],
+            exceptions.BadMessageId(
+                "'max' is not allowed as a message ID because it clashes "
+                "with an Elm default import. Please choose another ID."
+            ),
+        )
 
-    def test_name_collision_keyword(self):
-        code, errs = compile_messages_to_python("""
-            class = Class
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def class2(message_args, errors):
-                return ('Class', errors)
-        """)
-        self.assertEqual(errs, [])
+    def test_bad_name_duplicate(self):
+        code, errs = compile_messages_to_elm(
+            """
+            a-message-id = My Message
+
+            aMessageId = Another Message
+        """,
+            self.locale,
+        )
+        self.assertIn("COMPILATION_ERROR", code)
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(errs[0].message_id, "aMessageId")
+        self.assertEqual(
+            errs[0],
+            exceptions.BadMessageId(
+                "'aMessageId' is not allowed as a message ID because it clashes "
+                "with another message ID - 'a-message-id'. "
+                "Please choose another ID."
+            ),
+        )
 
     def test_message_mapping_used(self):
         # Checking that we actually use message_mapping when looking up the name
         # of the message function to call.
-        code, errs = compile_messages_to_python("""
-            zip = Foo
-            str = { zip }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def zip2(message_args, errors):
-                return ('Foo', errors)
-
-            def str2(message_args, errors):
-                return zip2(message_args, errors)
-        """)
+        code, errs = compile_messages_to_elm(
+            """
+            a-message-id = Foo
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            aMessageId : Locale.Locale -> a -> String
+            aMessageId locale_ args_ =
+                "Foo"
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_external_argument(self):
-        code, errs = compile_messages_to_python("""
-            with-arg = { $arg }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def with_arg(message_args, errors):
-                try:
-                    _tmp = message_args['arg']
-                except LookupError:
-                    errors.append(FluentReferenceError('Unknown external: arg'))
-                    _tmp = FluentNone('arg')
-                else:
-                    _tmp = handle_argument(_tmp, 'arg', locale, errors)
+        code, errs = compile_messages_to_elm(
+            """
+            with-arg = Some text { $arg }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            withArg : Locale.Locale -> { a | arg : String } -> String
+            withArg locale_ args_ =
+                String.concat ["Some text ", args_.arg]
+        """,
+        )
+        self.assertEqual(errs, [])
 
-                return (handle_output(_tmp, locale, errors), errors)
-        """)
+    def test_lone_external_argument(self):
+        code, errs = compile_messages_to_elm(
+            """
+            with-arg = { $arg }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            withArg : Locale.Locale -> { a | arg : String } -> String
+            withArg locale_ args_ =
+                args_.arg
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_function_call(self):
-        code, errs = compile_messages_to_python("""
-            foo = { NUMBER(12345) }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return (NUMBER(12345).format(locale), errors)
-        """)
+        code, errs = compile_messages_to_elm(
+            """
+                 foo = { NUMBER(1234) }
+        """,
+            self.locale,
+        )
         self.assertEqual(errs, [])
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                NumberFormat.format (NumberFormat.fromLocale locale_) 1234
+        """,
+        )
 
     def test_function_call_external_arg(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = { NUMBER($arg) }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                try:
-                    _tmp = message_args['arg']
-                except LookupError:
-                    errors.append(FluentReferenceError('Unknown external: arg'))
-                    _tmp = FluentNone('arg')
-                else:
-                    _tmp = handle_argument(_tmp, 'arg', locale, errors)
-
-                return (NUMBER(_tmp).format(locale), errors)
-        """)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | arg : Fluent.FluentNumber number } -> String
+            foo locale_ args_ =
+                Fluent.formatNumber locale_ args_.arg
+        """,
+        )
         self.assertEqual(errs, [])
 
-    def test_function_call_kwargs(self):
-        code, errs = compile_messages_to_python("""
-            foo = { NUMBER(12345, useGrouping: 0) }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return (NUMBER(12345, useGrouping=0).format(locale), errors)
-        """)
+    def test_NUMBER_useGrouping(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { NUMBER($arg, useGrouping: 0) }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | arg : Fluent.FluentNumber number } -> String
+            foo locale_ args_ =
+                let
+                    initial_opts_ = Fluent.numberFormattingOptions args_.arg
+                    fnum_ = Fluent.reformattedNumber { initial_opts_ | locale = locale_, useGrouping = False } args_.arg
+                in
+                    Fluent.formatNumber locale_ fnum_
+        """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_NUMBER_minimumIntegerDigits(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { NUMBER($arg, minimumIntegerDigits: 2) }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | arg : Fluent.FluentNumber number } -> String
+            foo locale_ args_ =
+                let
+                    initial_opts_ = Fluent.numberFormattingOptions args_.arg
+                    fnum_ = Fluent.reformattedNumber { initial_opts_ | locale = locale_, minimumIntegerDigits = Just 2 } args_.arg
+                in
+                    Fluent.formatNumber locale_ fnum_
+        """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_NUMBER_everything(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo =
+               There are { NUMBER(7890,
+                                  useGrouping: 0,
+                                  minimumIntegerDigits: 2,
+                                  minimumFractionDigits: 3,
+                                  maximumFractionDigits: 4,
+                                  minimumSignificantDigits: 5,
+                                  maximumSignificantDigits: 6 ) } things
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                let
+                    defaults_ = NumberFormat.defaults
+                    fnum_ = Fluent.formattedNumber { defaults_ | locale = locale_, maximumFractionDigits = Just 4, maximumSignificantDigits = Just 6, minimumFractionDigits = Just 3, minimumIntegerDigits = Just 2, minimumSignificantDigits = Just 5, useGrouping = False } 7890
+                in
+                    String.concat ["There are ", Fluent.formatNumber locale_ fnum_, " things"]
+        """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_inferred_date(self):
+        # From the second instance of $date we know it is a date,
+        # so it must be treated as a date in the first
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { $startdate }, { DATETIME($startdate) }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | startdate : Fluent.FluentDate } -> String
+            foo locale_ args_ =
+                String.concat [Fluent.formatDate locale_ args_.startdate, ", ", Fluent.formatDate locale_ args_.startdate]
+        """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_DATETIME_everything(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { DATETIME($startdate,
+                             hour12: 0,
+                             weekday: "short",
+                             era: "long",
+                             year: "numeric",
+                             month: "numeric",
+                             day: "numeric",
+                             hour: "2-digit",
+                             minute: "2-digit",
+                             second: "2-digit",
+                             timeZoneName: "short") }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | startdate : Fluent.FluentDate } -> String
+            foo locale_ args_ =
+                let
+                    initial_opts_ = Fluent.dateFormattingOptions args_.startdate
+                    fdate_ = Fluent.reformattedDate { initial_opts_ | day = DateTimeFormat.NumericNumber, era = DateTimeFormat.LongName, hour = DateTimeFormat.TwoDigitNumber, hour12 = Just False, locale = locale_, minute = DateTimeFormat.TwoDigitNumber, month = DateTimeFormat.NumericMonth, second = DateTimeFormat.TwoDigitNumber, timeZoneName = DateTimeFormat.ShortTimeZone, weekday = DateTimeFormat.ShortName, year = DateTimeFormat.NumericNumber } args_.startdate
+                in
+                    Fluent.formatDate locale_ fdate_
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_missing_function_call(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = { MISSING(123) }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                errors.append(FluentReferenceError('Unknown function: MISSING'))
-                return (FluentNone('MISSING()').format(locale), errors)
-        """),
-        self.assertEqual(errs, [('foo', FluentReferenceError('Unknown function: MISSING'))])
+        """,
+            self.locale,
+        )
+        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(
+            errs[0], exceptions.ReferenceError("Unknown function: MISSING")
+        )
 
     def test_function_call_with_bad_keyword_arg(self):
-        def MYFUNC(arg, kw1=None, kw2=None):
-            return arg
-        # Disallow 'kw2' arg
-        MYFUNC.ftl_arg_spec = [1, 'kw1']
-        code, errs = compile_messages_to_python("""
-            foo = { MYFUNC(123, kw2: 1) }
-        """, self.locale, functions={'MYFUNC': MYFUNC})
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                errors.append(TypeError("MYFUNC() got an unexpected keyword argument 'kw2'"))
-                return (FluentNone('MYFUNC()').format(locale), errors)
-        """),
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { NUMBER(123, foo: 1) }
+        """,
+            self.locale,
+        )
         self.assertEqual(len(errs), 1)
-        self.assertEqual(errs[0][0], 'foo')
-        self.assertEqual(type(errs[0][1]), TypeError)
+        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(
+            errs[0],
+            exceptions.FunctionParameterError(
+                "NUMBER() got an unexpected keyword argument 'foo'"
+            ),
+        )
 
     def test_function_call_with_bad_positional_arg(self):
-        def MYFUNC():
-            return ''
-        code, errs = compile_messages_to_python("""
-            foo = { MYFUNC(123) }
-        """, self.locale, functions={'MYFUNC': MYFUNC})
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                errors.append(TypeError('MYFUNC() takes 0 positional arguments but 1 was given'))
-                return (FluentNone('MYFUNC()').format(locale), errors)
-        """),
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { NUMBER(123, 456) }
+        """,
+            self.locale,
+        )
         self.assertEqual(len(errs), 1)
-        self.assertEqual(errs[0][0], 'foo')
-        self.assertEqual(type(errs[0][1]), TypeError)
+        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(
+            errs[0],
+            exceptions.FunctionParameterError(
+                "NUMBER() takes 1 positional argument(s) but 2 were given"
+            ),
+        )
 
     def test_message_with_attrs(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = Foo
                .attr-1 = Attr 1
                .attr-2 = Attr 2
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return ('Foo', errors)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "Foo"
 
-            def foo__attr_1(message_args, errors):
-                return ('Attr 1', errors)
+            foo_attr1 : Locale.Locale -> a -> String
+            foo_attr1 locale_ args_ =
+                "Attr 1"
 
-            def foo__attr_2(message_args, errors):
-                return ('Attr 2', errors)
-        """)
+            foo_attr2 : Locale.Locale -> a -> String
+            foo_attr2 locale_ args_ =
+                "Attr 2"
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_term_inline(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
            -term = Term
            message = Message { -term }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def message(message_args, errors):
-                return ('Message Term', errors)
-        """)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            message : Locale.Locale -> a -> String
+            message locale_ args_ =
+                "Message Term"
+        """,
+        )
 
     def test_variant_select_inline(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             -my-term = {
                 [a] A
                *[b] B
               }
             foo = Before { -my-term[a] } After
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return ('Before A After', errors)
-        """)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "Before A After"
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_variant_select_default(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             -my-term = {
                 [a] A
                *[b] B
               }
             foo = { -my-term }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return ('B', errors)
-        """)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "B"
+        """,
+        )
         self.assertEqual(errs, [])
 
-    def test_variant_select_fallback(self):
-        code, errs = compile_messages_to_python("""
+    def test_variant_select_missing_variant(self):
+        # We don't use the default, it is more useful to give a compilation error
+        code, errs = compile_messages_to_elm(
+            """
             -my-term = {
                 [a] A
                *[b] B
               }
             foo = { -my-term[c] }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                errors.append(FluentReferenceError('Unknown variant: -my-term[c]'))
-                return ('B', errors)
-        """)
-        self.assertEqual(errs,
-                         [('foo', FluentReferenceError('Unknown variant: -my-term[c]'))])
+        """,
+            self.locale,
+        )
+        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(
+            errs[0], exceptions.ReferenceError("Unknown variant: -my-term[c]")
+        )
+
+    def test_variant_select_missing_term(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { -my-term[a] }
+        """,
+            self.locale,
+        )
+        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(errs[0], exceptions.ReferenceError("Unknown term: -my-term"))
 
     def test_variant_select_from_non_variant(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             -my-term = Term
             foo = { -my-term[a] }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                errors.append(FluentReferenceError('Unknown variant: -my-term[a]'))
-                return ('Term', errors)
-        """)
+        """,
+            self.locale,
+        )
+        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(
+            errs[0], exceptions.ReferenceError("Unknown variant: -my-term[a]")
+        )
         self.assertEqual(len(errs), 1)
 
     def test_select_string(self):
-        code, errs = compile_messages_to_python("""
-           foo = { "a" ->
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { $stringArg ->
                 [a] A
                *[b] B
              }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                _key = 'a'
-                if _key == 'a':
-                    _ret = 'A'
-                else:
-                    _ret = 'B'
-
-                return (_ret, errors)
-        """)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | stringArg : String } -> String
+            foo locale_ args_ =
+                case args_.stringArg of
+                    "a" ->
+                        "A"
+                    _ ->
+                        "B"
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_select_number(self):
-        code, errs = compile_messages_to_python("""
-           foo = { 1 ->
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { $numberArg ->
                 [1] One
                *[2] { 2 }
              }
-        """, self.locale)
-        # We should not get 'NUMBER' calls in the select expression or
+        """,
+            self.locale,
+        )
+        # We should not get number formatting calls in the select expression or
         # or the key comparisons, but we should get them for the select value
         # for { 2 }.
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                _key = 1
-                if _key == 1:
-                    _ret = 'One'
-                else:
-                    _ret = NUMBER(2).format(locale)
-
-                return (_ret, errors)
-        """)
+        # We should also get $numberArg inferred to be numeric
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | numberArg : Fluent.FluentNumber number } -> String
+            foo locale_ args_ =
+                case Fluent.numberValue args_.numberArg of
+                    1 ->
+                        "One"
+                    _ ->
+                        NumberFormat.format (NumberFormat.fromLocale locale_) 2
+        """,
+        )
         self.assertEqual(errs, [])
 
-    def test_select_plural_category_with_literal(self):
-        code, errs = compile_messages_to_python("""
-           foo = { 1 ->
-                [one] One
-               *[other] Other
-             }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                _key = 1
-                _plural_form = plural_form_for_number(_key)
-                if (_key == 'one') or (_plural_form == 'one'):
-                    _ret = 'One'
-                else:
-                    _ret = 'Other'
-
-                return (_ret, errors)
-        """)
-        self.assertEqual(errs, [])
-
-    def test_select_plural_category_with_arg(self):
-        code, errs = compile_messages_to_python("""
-           foo = { $count ->
-                [0] You have nothing
+    def test_select_plural_categories(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { $count ->
                 [one] You have one thing
                *[other] You have some things
              }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                try:
-                    _tmp = message_args['count']
-                except LookupError:
-                    errors.append(FluentReferenceError('Unknown external: count'))
-                    _tmp = FluentNone('count')
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
+            foo locale_ args_ =
+                case PluralRules.select (PluralRules.fromLocale locale_) (Fluent.numberValue args_.count) of
+                    "one" ->
+                        "You have one thing"
+                    _ ->
+                        "You have some things"
+        """,
+        )
 
-                _key = _tmp
-                _plural_form = plural_form_for_number(_key)
-                if _key == 0:
-                    _ret = 'You have nothing'
-                elif (_key == 'one') or (_plural_form == 'one'):
-                    _ret = 'You have one thing'
-                else:
-                    _ret = 'You have some things'
+    def test_select_mixed_numeric(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { $count ->
+                [0] You have nothing
+                [one] You have a thing
+               *[other] You have some things
+             }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
+            foo locale_ args_ =
+                let
+                    val_ = Fluent.numberValue args_.count
+                    pl_ = PluralRules.select (PluralRules.fromLocale locale_) val_
+                in
+                    if (val_ == 0) then
+                        "You have nothing"
+                    else
+                        if (pl_ == "one") then
+                            "You have a thing"
+                        else
+                            "You have some things"
+        """,
+        )
 
-                return (_ret, errors)
-        """)
-        self.assertEqual(errs, [])
+    def test_select_mixed_numeric_last_not_default(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { $count ->
+                [0]     You have nothing
+               *[other] You have some things
+                [one]   You have a thing
+             }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
+            foo locale_ args_ =
+                let
+                    val_ = Fluent.numberValue args_.count
+                    pl_ = PluralRules.select (PluralRules.fromLocale locale_) val_
+                in
+                    if (val_ == 0) then
+                        "You have nothing"
+                    else
+                        if (pl_ == "other") then
+                            "You have some things"
+                        else
+                            if (pl_ == "one") then
+                                "You have a thing"
+                            else
+                                "You have some things"
+        """,
+        )
 
     def test_combine_strings(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = Start { "Middle" } End
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return ('Start Middle End', errors)
-        """)
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "Start Middle End"
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_single_string_literal_isolating(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = Foo
-        """, self.locale, use_isolating=True)
+        """,
+            self.locale,
+            use_isolating=True,
+        )
         # No isolating chars, because we have no placeables.
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                return ('Foo', errors)
-        """)
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "Foo"
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_interpolation_isolating(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = Foo { $arg } Bar
-        """, self.locale, use_isolating=True)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                try:
-                    _tmp = message_args['arg']
-                except LookupError:
-                    errors.append(FluentReferenceError('Unknown external: arg'))
-                    _tmp = FluentNone('arg')
-                else:
-                    _tmp = handle_argument(_tmp, 'arg', locale, errors)
-
-                return (''.join(['Foo \\u2068', handle_output(_tmp, locale, errors), '\\u2069 Bar']), errors)
-        """)
+        """,
+            self.locale,
+            use_isolating=True,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> { a | arg : String } -> String
+            foo locale_ args_ =
+                String.concat ["Foo \u2068", args_.arg, "\u2069 Bar"]
+        """,
+        )
         self.assertEqual(errs, [])
 
     def test_cycle_detection(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = { foo }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                errors.append(FluentCyclicReferenceError('Cyclic reference in foo'))
-                return (FluentNone().format(locale), errors)
-        """)
-        self.assertEqual(errs, [('foo', FluentCyclicReferenceError("Cyclic reference in foo"))])
+        """,
+            self.locale,
+        )
+        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(
+            errs[0], exceptions.CyclicReferenceError("Cyclic reference in foo")
+        )
 
     def test_cycle_detection_with_attrs(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             foo
                .attr1 = { bar.attr2 }
 
             bar
                .attr2 = { foo.attr1 }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo__attr1(message_args, errors):
-                errors.append(FluentCyclicReferenceError('Cyclic reference in foo.attr1'))
-                return (FluentNone().format(locale), errors)
-
-            def bar__attr2(message_args, errors):
-                errors.append(FluentCyclicReferenceError('Cyclic reference in bar.attr2'))
-                return (FluentNone().format(locale), errors)
-        """)
-        self.assertEqual(errs, [('foo.attr1', FluentCyclicReferenceError("Cyclic reference in foo.attr1")),
-                                ('bar.attr2', FluentCyclicReferenceError("Cyclic reference in bar.attr2")),
-                                ])
+        """,
+            self.locale,
+        )
+        self.assertEqual(errs[0].message_id, "foo.attr1")
+        self.assertEqual(
+            errs[0], exceptions.CyclicReferenceError("Cyclic reference in foo.attr1")
+        )
+        self.assertEqual(errs[1].message_id, "bar.attr2")
+        self.assertEqual(
+            errs[1], exceptions.CyclicReferenceError("Cyclic reference in bar.attr2")
+        )
 
     def test_term_cycle_detection(self):
-        code, errs = compile_messages_to_python("""
+        code, errs = compile_messages_to_elm(
+            """
             -cyclic-term = { -cyclic-term }
             cyclic-term-message = { -cyclic-term }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def cyclic_term_message(message_args, errors):
-                errors.append(FluentCyclicReferenceError('Cyclic reference in cyclic-term-message'))
-                return (FluentNone().format(locale), errors)
-        """)
-        self.assertEqual(errs, [('cyclic-term-message',
-                                 FluentCyclicReferenceError("Cyclic reference in cyclic-term-message")),
-                                ])
-
-    def test_cycle_detection_with_unknown_attr(self):
-        # unknown attributes fall back to main message, which brings
-        # another option for a cycle.
-        code, errs = compile_messages_to_python("""
-            foo = { bar.bad-attr }
-
-            bar = { foo }
-        """, self.locale)
-        self.assertCodeEqual(code, """
-            def foo(message_args, errors):
-                errors.append(FluentCyclicReferenceError('Cyclic reference in foo'))
-                return (FluentNone().format(locale), errors)
-
-            def bar(message_args, errors):
-                errors.append(FluentCyclicReferenceError('Cyclic reference in bar'))
-                return (FluentNone().format(locale), errors)
-        """)
-        self.assertEqual(errs, [('foo', FluentCyclicReferenceError("Cyclic reference in foo")),
-                                ('bar', FluentCyclicReferenceError("Cyclic reference in bar")),
-                                ])
+        """,
+            self.locale,
+        )
+        self.assertEqual(errs[0].message_id, "cyclic-term-message")
+        self.assertEqual(
+            errs[0],
+            exceptions.CyclicReferenceError("Cyclic reference in cyclic-term-message"),
+        )

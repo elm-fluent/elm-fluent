@@ -5,28 +5,38 @@ class FluentError(ValueError):
     # This equality method exists to make exact tests for exceptions much
     # simpler to write, at least for our own errors.
     def __eq__(self, other):
-        return ((other.__class__ == self.__class__) and
-                other.args == self.args)
+        return (other.__class__ == self.__class__) and other.args == self.args
+
+    def __hash__(self):
+        return hash(self.args)
 
 
-class FluentFormatError(FluentError):
+class ReferenceError(FluentError):
     pass
 
 
-class FluentReferenceError(FluentFormatError):
+class CyclicReferenceError(FluentError):
     pass
 
 
-class FluentCyclicReferenceError(FluentFormatError):
+class DuplicateMessageId(FluentError):
     pass
 
 
-class FluentDuplicateMessageId(FluentError):
-    pass
-
-
-class FluentJunkFound(FluentError):
+class JunkFound(FluentError):
     def __init__(self, *args):
-        super(FluentJunkFound, self).__init__(*args)
+        super(JunkFound, self).__init__(*args)
         self.message = args[0]
         self.annotations = args[1]
+
+
+class BadMessageId(FluentError):
+    pass
+
+
+class TypeMismatch(FluentError):
+    pass
+
+
+class FunctionParameterError(FluentError):
+    pass
