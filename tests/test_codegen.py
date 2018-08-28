@@ -188,7 +188,7 @@ class TestCodeGen(unittest.TestCase):
                     y = 2
                 in
                     (x + y)
-        """,
+            """,
         )
 
     def test_add_function(self):
@@ -333,7 +333,7 @@ class TestCodeGen(unittest.TestCase):
         scope.reserve_name("tmp")
         var = scope.variables["tmp"]
         join = codegen.Concat([codegen.String("hello "), var])
-        self.assertCodeEqual(join.as_source_code(), 'String.concat ["hello ", tmp]')
+        self.assertCodeEqual(join.as_source_code(), 'String.concat [ "hello ", tmp ]')
 
     def test_string_join_collapse_strings(self):
         scope = codegen.Scope()
@@ -351,7 +351,7 @@ class TestCodeGen(unittest.TestCase):
         join1 = codegen.simplify(join1)
         self.assertCodeEqual(
             join1.as_source_code(),
-            'String.concat ["hello there ", tmp, " how are you?"]',
+            'String.concat [ "hello there ", tmp, " how are you?" ]',
         )
 
     def test_cleanup_name(self):
@@ -404,5 +404,53 @@ class TestCodeGen(unittest.TestCase):
             update.as_source_code(),
             """
             { tmp | age = 34, name = "Fred" }
+        """,
+        )
+
+    def test_multiple_indent(self):
+        scope = codegen.Scope()
+        scope.reserve_name(
+            "aFunction",
+            type=types.Function.for_multiple_inputs(
+                [dtypes.Number, dtypes.Number], dtypes.String
+            ),
+        )
+        let1 = codegen.Let()
+        name1 = let1.add_assignment("x", codegen.Number(1))
+        name2 = let1.add_assignment("y", codegen.Number(2))
+        let1.value = codegen.Add(name1, name2)
+
+        case1 = codegen.Case(codegen.Add(codegen.Number(7), codegen.Number(8)))
+        branch1 = case1.add_branch(codegen.Number(15))
+        branch1.value = codegen.Number(16)
+        branch2 = case1.add_branch(codegen.Otherwise())
+        branch2.value = codegen.Number(17)
+
+        let2 = codegen.Let()
+        name3 = let2.add_assignment("a", codegen.Number(3))
+        name4 = let2.add_assignment("b", case1)
+        let2.add_assignment("c", codegen.Number(4))
+        let2.value = codegen.Add(name3, name4)
+
+        func_call = scope.variables["aFunction"].apply(let1, let2)
+        func_call = codegen.simplify(func_call)
+        self.assertCodeEqual(
+            func_call.as_source_code(),
+            """
+        aFunction (let
+                       x = 1
+                       y = 2
+                   in
+                       (x + y)) (let
+                                     a = 3
+                                     b = case (7 + 8) of
+                                             15 ->
+                                                 16
+                                             _ ->
+                                                 17
+
+                                     c = 4
+                                 in
+                                     (a + b))
         """,
         )

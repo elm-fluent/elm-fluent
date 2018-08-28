@@ -3,6 +3,7 @@ Utilities for doing Python code generation
 """
 from __future__ import absolute_import, unicode_literals
 
+import contextlib
 import re
 from functools import wraps
 
@@ -61,6 +62,11 @@ class ElmAst(object):
 
     def finalize(self):
         pass
+
+    def as_source_code(self):
+        builder = SourceCodeBuilder()
+        self.build_source(builder)
+        return builder.render()
 
 
 class Variables(object):
@@ -315,7 +321,7 @@ class Module(Scope):
         for s in self.sorted_statements():
             lines.append(s.as_source_code())
             # blank line
-            lines.append("\n")
+            lines.append("\n\n")
         return "".join(lines)
 
     def sorted_statements(self):
@@ -344,8 +350,10 @@ class _Assignment(Statement):
     #     else:
     #         return "({0})".format(", ".join(n for n in self.names))
 
-    def as_source_code(self):
-        return "{0} = {1}".format(self.name, self.value.as_source_code())
+    def build_source(self, builder):
+        builder.add_part(self.name)
+        builder.add_part(" = ")
+        self.value.build_source(builder)
 
     def simplify(self, changes):
         self.value = self.value.simplify(changes)
@@ -403,7 +411,7 @@ class Function(Scope, Statement):
                 output_type = output_type.output_type
             self.body.constrain_type(output_type)
 
-    def as_source_code(self):
+    def build_source(self, builder):
         if self.parent_scope is None:
             signature = ""
         else:
@@ -416,12 +424,15 @@ class Function(Scope, Statement):
                     signature=function_type.as_signature(self.parent_scope),
                     name=self.func_name,
                 )
-        function_def = "{name} {args}=\n{body}".format(
-            name=self.func_name,
-            args="".join(a + " " for a in self.args),
-            body=indent(self.body.as_source_code()),
-        )
-        return signature + function_def
+
+        builder.add_part(signature)
+        builder.add_part(self.func_name)
+        for arg in self.args:
+            builder.add_part(" " + arg)
+
+        builder.add_part(" =\n")
+        with builder.indented():
+            self.body.build_source(builder)
 
     def simplify(self, changes):
         self.body = self.body.simplify(changes)
@@ -472,6 +483,66 @@ class fixed_type(object):
     def __set__(self, obj, value):
         assert value is self._resolve_type()
         pass
+
+
+class SourceCodeBuilder(object):
+    BLOCK_INDENT_SIZE = 4
+
+    def __init__(self):
+        self.parts = []
+        self.indent_level = 0
+        self.current_line = ""
+
+    def add_part(self, part):
+        if self.current_line == "":
+            # Add indentation:
+            indent = " " * self.indent_level
+            self.parts.append(indent)
+            self.current_line += indent
+        if "\n" in part and part.find("\n") != len(part) - 1:
+            raise ValueError(
+                "If you pass '\n' to add_part, it must be at the end of string value"
+            )
+        self.current_line += part
+        if self.current_line.endswith("\n"):
+            self.current_line = ""
+        self.parts.append(part)
+
+    def render(self):
+        return "".join(self.parts)
+
+    @contextlib.contextmanager
+    def aligned_block(self):
+        old_indent_level = self.indent_level
+        if self.current_line == "":
+            alignment_level = self.indent_level
+        else:
+            alignment_level = len(self.current_line)
+        self.indent_level = alignment_level
+        yield
+        self.indent_level = old_indent_level
+
+    @contextlib.contextmanager
+    def indented(self):
+        self.indent_level += self.BLOCK_INDENT_SIZE
+        yield self
+        self.indent_level -= self.BLOCK_INDENT_SIZE
+
+    @contextlib.contextmanager
+    def parens_if_needed(self, expr):
+        # TODO - may need a better way to determine when we need parentheses, that
+        # respects operator precedence etc. At the moment the following suffices.
+        # Operators do wrapping always to be safe.
+        wrapping = not isinstance(
+            expr, (Literal, Bracketing, VariableReference, AttributeReference)
+        )
+        if wrapping:
+            self.add_part("(")
+
+        yield self
+
+        if wrapping:
+            self.add_part(")")
 
 
 class Expression(ElmAst):
@@ -546,11 +617,16 @@ class Let(Expression, Scope):
         yield from self.assignments
         yield self.value
 
-    def as_source_code(self):
-        return "let\n{0}in\n{1}\n".format(
-            indent("\n".join(a.as_source_code() for a in self.assignments)),
-            indent(self.value.as_source_code()),
-        )
+    def build_source(self, builder):
+        with builder.aligned_block():
+            builder.add_part("let\n")
+            with builder.indented():
+                for a in self.assignments:
+                    a.build_source(builder)
+                    builder.add_part("\n")
+            builder.add_part("in\n")
+            with builder.indented():
+                self.value.build_source(builder)
 
 
 class If(Expression):
@@ -572,12 +648,17 @@ class If(Expression):
         self.true_branch.type = type_obj.constrain(self.true_branch.type)
         self.false_branch.type = type_obj.constrain(self.false_branch.type)
 
-    def as_source_code(self):
-        return "if {0} then\n{1}else\n{2}".format(
-            self.condition.as_source_code(),
-            indent(self.true_branch.as_source_code()),
-            indent(self.false_branch.as_source_code()),
-        )
+    def build_source(self, builder):
+        with builder.aligned_block():
+            builder.add_part("if ")
+            self.condition.build_source(builder)
+            builder.add_part(" then\n")
+            with builder.indented():
+                self.true_branch.build_source(builder)
+                builder.add_part("\n")
+            builder.add_part("else\n")
+            with builder.indented():
+                self.false_branch.build_source(builder)
 
     def sub_expressions(self):
         yield self.condition
@@ -602,13 +683,18 @@ class Case(Expression):
         self.branches.append((matcher, value))
         return value
 
-    def as_source_code(self):
-        output = []
-        output.append("case {0} of\n".format(self.selector.as_source_code()))
-        for matcher, value in self.branches:
-            output.append(indent("{0} ->".format(matcher.as_source_code())))
-            output.append(indent(indent(value.as_source_code())))
-        return "".join(output)
+    def build_source(self, builder):
+        with builder.aligned_block():
+            builder.add_part("case ")
+            self.selector.build_source(builder)
+            builder.add_part(" of\n")
+            with builder.indented():
+                for matcher, value in self.branches:
+                    matcher.build_source(builder)
+                    builder.add_part(" ->\n")
+                    with builder.indented():
+                        value.build_source(builder)
+                        builder.add_part("\n")
 
     @property
     def type(self):
@@ -660,9 +746,9 @@ class String(Literal):
     def __repr__(self):
         return "<String {0}>".format(repr(self.string_value))
 
-    def as_source_code(self):
+    def build_source(self, builder):
         # TODO - escapes for some chars?
-        return '"{0}"'.format(self.string_value.replace('"', '\\"'))
+        builder.add_part('"{0}"'.format(self.string_value.replace('"', '\\"')))
 
 
 class Number(Literal):
@@ -671,17 +757,22 @@ class Number(Literal):
     def __init__(self, number):
         self.number = number
 
-    def as_source_code(self):
+    def build_source(self, builder):
         # TODO - Are there cases where this won't work?
-        return repr(self.number)
+        builder.add_part(repr(self.number))
 
 
 class List(Bracketing, Expression):
     def __init__(self, items):
         self.items = items
 
-    def as_source_code(self):
-        return "[" + ", ".join(i.as_source_code() for i in self.items) + "]"
+    def build_source(self, builder):
+        builder.add_part("[ ")
+        for i, item in enumerate(self.items):
+            item.build_source(builder)
+            if i < len(self.items) - 1:
+                builder.add_part(", ")
+        builder.add_part(" ]")
 
     def simplify(self, changes):
         self.items = [item.simplify(changes) for item in self.items]
@@ -705,8 +796,9 @@ class Concat(Expression):
         for part in self.parts:
             part.type = type_obj.constrain(part.type)
 
-    def as_source_code(self):
-        return "String.concat {0}".format(List(self.parts).as_source_code())
+    def build_source(self, builder):
+        builder.add_part("String.concat ")
+        List(self.parts).build_source(builder)
 
     def simplify(self, changes):
         # Simplify sub parts
@@ -767,10 +859,11 @@ class VariableReference(Expression):
     def type(self, type_obj):
         self._definition_scope.set_type(self.name, type_obj.constrain(self.type))
 
-    def as_source_code(self):
-        return (
-            (self.module_name + ".") if self.module_name is not None else ""
-        ) + self.name
+    def build_source(self, builder):
+        builder.add_part(
+            ((self.module_name + ".") if self.module_name is not None else "")
+            + self.name
+        )
 
     def sub_expressions(self):
         return []
@@ -799,8 +892,10 @@ class AttributeReference(Expression):
             repr(self.variable), self.attribute_name
         )
 
-    def as_source_code(self):
-        return "{0}.{1}".format(self.variable.as_source_code(), self.attribute_name)
+    def build_source(self, builder):
+        self.variable.build_source(builder)
+        builder.add_part(".")
+        builder.add_part(self.attribute_name)
 
     def sub_expressions(self):
         yield self.variable
@@ -828,11 +923,12 @@ class FunctionCall(Expression):
             self.expr.as_source_code(), " ".join(repr(a) for a in self.args)
         )
 
-    def as_source_code(self):
-        return "{0}{1}".format(
-            self.expr.as_source_code(),
-            "".join(" " + parenthesis_wrap(arg) for arg in self.args),
-        )
+    def build_source(self, builder):
+        self.expr.build_source(builder)
+        for arg in self.args:
+            builder.add_part(" ")
+            with builder.parens_if_needed(arg):
+                arg.build_source(builder)
 
     def sub_expressions(self):
         yield self.expr
@@ -841,19 +937,6 @@ class FunctionCall(Expression):
     def simplify(self, changes):
         self.args = [arg.simplify(changes) for arg in self.args]
         return self
-
-
-def parenthesis_wrap(expr):
-    # TODO - may need a better way to determine when we need parentheses, that
-    # respects operator precedence etc. At the moment the following suffices.
-    # Operators do wrapping always to be safe.
-    no_wrapping = isinstance(
-        expr, (Literal, Bracketing, VariableReference, AttributeReference)
-    )
-    if no_wrapping:
-        return expr.as_source_code()
-    else:
-        return "({0})".format(expr.as_source_code())
 
 
 class Otherwise(Expression):
@@ -871,8 +954,8 @@ class Otherwise(Expression):
     def sub_expressions(self):
         return []
 
-    def as_source_code(self):
-        return "_"
+    def build_source(self, builder):
+        builder.add_part("_")
 
 
 class CompilationError(Expression):
@@ -888,12 +971,12 @@ class CompilationError(Expression):
         # Just assign without complaining
         self._type = type_obj
 
-    def as_source_code(self):
+    def build_source(self, builder):
         # Return something that will definitely cause the Elm code to fail to
         # compile. Normally the value is not written out anywhere. It exists as
         # an Expression to allow compilation to continue, so that as many error
         # messages as possible can be collected instead of quitting early.
-        return "!!!COMPILATION_ERROR!!!"
+        builder.add_part("!!!COMPILATION_ERROR!!!")
 
     def sub_expressions(self):
         return []
@@ -907,10 +990,12 @@ def infix_operator(operator, return_type):
             self.left = left
             self.right = right
 
-        def as_source_code(self):
-            return "({0} {1} {2})".format(
-                self.left.as_source_code(), operator, self.right.as_source_code()
-            )
+        def build_source(self, builder):
+            builder.add_part("(")
+            self.left.build_source(builder)
+            builder.add_part(" " + operator + " ")
+            self.right.build_source(builder)
+            builder.add_part(")")
 
         def simplify(self, changes):
             self.left = self.left.simplify(changes)
@@ -925,7 +1010,7 @@ def infix_operator(operator, return_type):
 
 
 Equals = infix_operator("==", "Bool")
-Add = infix_operator("+", "number")
+Add = infix_operator("+", "Number")
 
 
 class RecordUpdate(Bracketing, Expression):
@@ -958,21 +1043,17 @@ class RecordUpdate(Bracketing, Expression):
         for name, val in self.updates.items():
             yield val
 
-    def as_source_code(self):
-        return (
-            "{ "
-            + self.var.as_source_code()
-            + " | "
-            + ", ".join(
-                "{0} = {1}".format(name, val.as_source_code())
-                for name, val in sorted(self.updates.items())
-            )
-            + " }"
-        )
-
-
-def indent(text):
-    return "".join("    " + l + "\n" for l in text.rstrip("\n").split("\n"))
+    def build_source(self, builder):
+        builder.add_part("{ ")
+        self.var.build_source(builder)
+        builder.add_part(" | ")
+        for i, (name, val) in enumerate(sorted(self.updates.items())):
+            builder.add_part(name)
+            builder.add_part(" = ")
+            val.build_source(builder)
+            if i < len(self.updates) - 1:
+                builder.add_part(", ")
+        builder.add_part(" }")
 
 
 def simplify(source_code):

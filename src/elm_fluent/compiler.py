@@ -8,8 +8,12 @@ import six
 from fluent.syntax import FluentParser, ast
 
 from . import codegen, exceptions, types
-from .stubs import (defaults as dtypes, intl_datetimeformat, intl_numberformat,
-                    intl_pluralrules,)
+from .stubs import (
+    defaults as dtypes,
+    intl_datetimeformat,
+    intl_numberformat,
+    intl_pluralrules,
+)
 from .stubs.defaults import default_imports
 from .stubs.fluent import FluentDate, FluentNumber, module as fluent_module
 from .stubs.intl_locale import Locale, module as intl_locale_module
@@ -893,7 +897,9 @@ def args_match(function_spec, args, kwargs):
             exceptions.FunctionParameterError(
                 "{0}() got an unexpected keyword argument '{1}'".format(
                     function_spec.name,
-                    six.next(kw for kw in kwargs if kw not in function_spec.keyword_args),
+                    six.next(
+                        kw for kw in kwargs if kw not in function_spec.keyword_args
+                    ),
                 )
             ),
         )
