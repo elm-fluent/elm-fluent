@@ -16,25 +16,33 @@ elm-fluent
 
 `Fluent <https://projectfluent.org/>`_ i18n solution for Elm
 
+
+Fluent is a next-generation translation/localization solution, designed by the
+folks at Mozilla, and extracted from their l20n solution to be a re-usable
+specification.
+
+elm-fluent is a full implementation of this specification for Elm. It operates
+as a command line tool that compiles ``.ftl`` files to Elm files. The result is
+that each message becomes a function that will generate a translated string (or
+HTML fragment) for a given locale and an optional set of strongly typed
+parameters (string, dates or numbers).
+
+Dates and numbers can also be passed with formatting parameters supplied - for
+example, to attach a currency to a number, so that it can be correctly formatted
+as a currency according to the rules of the locale in use.
+
+Please see the `docs
+<https://elm-fluent.readthedocs.io/en/latest/>`_ for more
+information.
+
 Status
 ------
 
 * Alpha, but usable
 * Under very heavy development
 * A working test suite
-* No docs :-( . The contents of ``tests/test_project``, and the ``test_end_to_end.py`` file, are the closest
-  to docs currently.
 * Compatibility: Elm 0.18 only at the moment.
-
-  With Elm 0.19, lack of builtin support for `Intl
-  <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl>`_,
-  plus the changes that make 3rd party native code much harder, means this will
-  not be fixed very quickly.
-
-----
-
 * Free software: MIT license
-* Documentation: https://elm-fluent.readthedocs.io
 
 
 Main TODO items

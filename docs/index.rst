@@ -5,10 +5,9 @@ Welcome to elm-fluent's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-   readme
+   overview
    installation
-   usage
-   modules
+   tutorial
    contributing
    authors
    history
