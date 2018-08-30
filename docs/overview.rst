@@ -39,7 +39,7 @@ something like this:
 
    notifications-title = Notifications
 
-   notifications-intro = You have unread notifications
+   notifications-intro = Hello { $username }, you have unread notifications
 
 
 You compile this to Elm files using ``ftl2elm``. (Normally the generated
@@ -47,26 +47,40 @@ You compile this to Elm files using ``ftl2elm``. (Normally the generated
 files). You can then use the generated functions from your Elm source code.
 
 Your app first needs some way to determine the user's current locale. This is
-usually best done by given them the choice, and saving this in the model
-somewhere. Let's assume we have ``model.locale`` already. Then our Elm source
-code might look like this:
-
+usually best done by allowing them to choose from a list, and then saving this
+in the model somewhere. Let's assume we have ``model.locale`` set up already.
+Then our Elm source code might look like this:
 
 .. code-block:: elm
 
-   import Ftl.Translation.Notifications as T
+   import Ftl.Translations.Notifications as T
 
    viewNotifications model =
         Html.div []
                  [ Html.h2 (T.notificationsTitle model.locale ())
-                 , Html.p (T.notificationsIntro model.locale ())
+                 , Html.p (T.notificationsIntro model.locale { username = model.username })
                  ]
 
-You now need to get distribute your ``.ftl`` files and get translations for the
+The generated functions (in this case ``notificationsTitle`` and
+``notificationsIntro``) all have the same signature - they take a locale value
+and a strongly typed record of substitution parameters, and return a string (or
+``Html`` for advanced use cases).
+
+.. admonition:: Justifcation
+
+   Using a strongly typed record type means that we can catch the vast majority
+   of errors at compile time. If a translator includes a parameter in their
+   translation that is not passed by the developer, the code will not compile.
+   We can also ensure that numbers get passed as numbers etc.
+
+Depending on the locale parameter, the generated functions dispatch to the
+function for the correct language (we just have one so far).
+
+You now need to distribute your ``.ftl`` files and get translations for the
 other languages you support. These are saved into the correct sub folder in your
 locales directory and committed to VCS. (Mozilla has developed the `Pontoon
-<https://github.com/mozilla/pontoon>`_ system to help with this, but elm-fluent
-doesn't have good integration with it yet).
+<https://github.com/mozilla/pontoon>`_ system to help with this part, but
+elm-fluent doesn't have good integration with it yet).
 
 Finally, you can now compile the ``.ftl`` for all the languages, compile your
 Elm app and deploy.
