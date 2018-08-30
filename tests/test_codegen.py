@@ -333,7 +333,11 @@ class TestCodeGen(unittest.TestCase):
         scope.reserve_name("tmp")
         var = scope.variables["tmp"]
         join = codegen.Concat([codegen.String("hello "), var])
-        self.assertCodeEqual(join.as_source_code(), 'String.concat [ "hello ", tmp ]')
+        self.assertCodeEqual(join.as_source_code(), """
+            String.concat [ "hello "
+                          , tmp
+                          ]
+        """)
 
     def test_string_join_collapse_strings(self):
         scope = codegen.Scope()
@@ -350,8 +354,12 @@ class TestCodeGen(unittest.TestCase):
         )
         join1 = codegen.simplify(join1)
         self.assertCodeEqual(
-            join1.as_source_code(),
-            'String.concat [ "hello there ", tmp, " how are you?" ]',
+            join1.as_source_code(), """
+            String.concat [ "hello there "
+                          , tmp
+                          , " how are you?"
+                          ]
+            """,
         )
 
     def test_cleanup_name(self):

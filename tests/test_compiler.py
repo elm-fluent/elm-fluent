@@ -124,7 +124,10 @@ class TestCompiler(unittest.TestCase):
             """
             foo : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
             foo locale_ args_ =
-                String.concat [ Fluent.formatNumber locale_ args_.count, ", ", Fluent.formatNumber locale_ args_.count ]
+                String.concat [ Fluent.formatNumber locale_ args_.count
+                              , ", "
+                              , Fluent.formatNumber locale_ args_.count
+                              ]
         """,
         )
         self.assertEqual(errs, [])
@@ -148,7 +151,10 @@ class TestCompiler(unittest.TestCase):
                     "one" ->
                         "You have one item"
                     _ ->
-                        String.concat [ "You have ", Fluent.formatNumber locale_ args_.count, " items" ]
+                        String.concat [ "You have "
+                                      , Fluent.formatNumber locale_ args_.count
+                                      , " items"
+                                      ]
         """,
         )
         self.assertEqual(errs, [])
@@ -195,7 +201,10 @@ class TestCompiler(unittest.TestCase):
 
             foo : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
             foo locale_ args_ =
-                String.concat [ Fluent.formatNumber locale_ args_.count, " - ", bar locale_ args_ ]
+                String.concat [ Fluent.formatNumber locale_ args_.count
+                              , " - "
+                              , bar locale_ args_
+                              ]
         """,
         )
         self.assertEqual(errs, [])
@@ -220,7 +229,10 @@ class TestCompiler(unittest.TestCase):
 
             bar : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
             bar locale_ args_ =
-                String.concat [ Fluent.formatNumber locale_ args_.count, " - ", baz locale_ args_ ]
+                String.concat [ Fluent.formatNumber locale_ args_.count
+                              , " - "
+                              , baz locale_ args_
+                              ]
 
             baz : Locale.Locale -> { a | count : Fluent.FluentNumber number } -> String
             baz locale_ args_ =
@@ -246,7 +258,9 @@ class TestCompiler(unittest.TestCase):
 
             bar : Locale.Locale -> a -> String
             bar locale_ args_ =
-                String.concat [ "X ", foo locale_ args_ ]
+                String.concat [ "X "
+                              , foo locale_ args_
+                              ]
         """,
         )
         self.assertEqual(errs, [])
@@ -431,7 +445,9 @@ class TestCompiler(unittest.TestCase):
             """
             withArg : Locale.Locale -> { a | arg : String } -> String
             withArg locale_ args_ =
-                String.concat [ "Some text ", args_.arg ]
+                String.concat [ "Some text "
+                              , args_.arg
+                              ]
         """,
         )
         self.assertEqual(errs, [])
@@ -552,7 +568,10 @@ class TestCompiler(unittest.TestCase):
                     defaults_ = NumberFormat.defaults
                     fnum_ = Fluent.formattedNumber { defaults_ | locale = locale_, maximumFractionDigits = Just 4, maximumSignificantDigits = Just 6, minimumFractionDigits = Just 3, minimumIntegerDigits = Just 2, minimumSignificantDigits = Just 5, useGrouping = False } 7890
                 in
-                    String.concat [ "There are ", Fluent.formatNumber locale_ fnum_, " things" ]
+                    String.concat [ "There are "
+                                  , Fluent.formatNumber locale_ fnum_
+                                  , " things"
+                                  ]
         """,
         )
         self.assertEqual(errs, [])
@@ -571,7 +590,10 @@ class TestCompiler(unittest.TestCase):
             """
             foo : Locale.Locale -> { a | startdate : Fluent.FluentDate } -> String
             foo locale_ args_ =
-                String.concat [ Fluent.formatDate locale_ args_.startdate, ", ", Fluent.formatDate locale_ args_.startdate ]
+                String.concat [ Fluent.formatDate locale_ args_.startdate
+                              , ", "
+                              , Fluent.formatDate locale_ args_.startdate
+                              ]
         """,
         )
         self.assertEqual(errs, [])
@@ -965,7 +987,10 @@ class TestCompiler(unittest.TestCase):
             """
             foo : Locale.Locale -> { a | arg : String } -> String
             foo locale_ args_ =
-                String.concat [ "Foo \u2068", args_.arg, "\u2069 Bar" ]
+                String.concat [ "Foo \u2068"
+                              , args_.arg
+                              , "\u2069 Bar"
+                              ]
         """,
         )
         self.assertEqual(errs, [])

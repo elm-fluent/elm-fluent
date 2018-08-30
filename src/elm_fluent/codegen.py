@@ -767,12 +767,18 @@ class List(Bracketing, Expression):
         self.items = items
 
     def build_source(self, builder):
-        builder.add_part("[ ")
-        for i, item in enumerate(self.items):
-            item.build_source(builder)
-            if i < len(self.items) - 1:
-                builder.add_part(", ")
-        builder.add_part(" ]")
+        if len(self.items) == 0:
+            builder.add_part("[]")
+        else:
+            with builder.aligned_block():
+                for i, item in enumerate(self.items):
+                    if i == 0:
+                        builder.add_part("[ ")
+                    else:
+                        builder.add_part(", ")
+                    item.build_source(builder)
+                    builder.add_part("\n")
+                builder.add_part("]")
 
     def simplify(self, changes):
         self.items = [item.simplify(changes) for item in self.items]
