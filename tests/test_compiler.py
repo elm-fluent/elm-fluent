@@ -1040,3 +1040,30 @@ class TestCompiler(unittest.TestCase):
             errs[0],
             exceptions.CyclicReferenceError("Cyclic reference in cyclic-term-message"),
         )
+
+
+class TestHtml(unittest.TestCase):
+    locale = babel.Locale.parse("en_US")
+
+    maxDiff = None
+
+    def assertCodeEqual(self, code1, code2):
+        self.assertEqual(normalize_elm(code1), normalize_elm(code2))
+
+    def test_text(self):
+        code, errs = compile_messages_to_elm(
+            """
+            text-html = Me &amp; my friends
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            textHtml : Locale.Locale -> a -> List (Html.Html msg)
+            textHtml locale_ args_ =
+                [ Html.text "Me & my friends"
+                ]
+            """
+        )
+        self.assertEqual(errs, [])

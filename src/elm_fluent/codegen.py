@@ -285,7 +285,7 @@ class Module(Scope):
         for name, mod in self.import_dict.items():
             if mod == module:
                 return name + "."
-        raise LookupError("module {0} not found in {1}".format(module, self))
+        raise LookupError("module {0} not found in {1}. Missing 'add_import'?".format(module, self))
 
     def add_function(self, func_name, func, expose=True, source_order=None):
         assert func.func_name == func_name
@@ -766,6 +766,23 @@ class List(Bracketing, Expression):
     def __init__(self, items):
         self.items = items
 
+    @property
+    def type(self):
+        # TODO - can we do better than just using the first one?
+        # Does it matter?
+        from .stubs import defaults as dtypes
+        if self.items:
+            return dtypes.List.specialize(a=self.items[0].type)
+        else:
+            return dtypes.List
+
+    @type.setter
+    def type(self, type_obj):
+        list_type = type_obj.constrain(self.type)
+        val_type = list_type.param_dict['a']
+        for val in self.items:
+            val.type = val_type.constrain(val.type)
+
     def build_source(self, builder):
         if len(self.items) == 0:
             builder.add_part("[]")
@@ -779,6 +796,10 @@ class List(Bracketing, Expression):
                     item.build_source(builder)
                     builder.add_part("\n")
                 builder.add_part("]")
+
+
+    def sub_expressions(self):
+        return self.items
 
     def simplify(self, changes):
         self.items = [item.simplify(changes) for item in self.items]

@@ -89,3 +89,6 @@ class TestEndToEnd(unittest.TestCase):
 
         # Dates:
         self.assertIn("January 1, 1970 AD, 01:02:03", page_source)
+
+        # Html:
+        self.assertIn("Some text with this &amp; that", page_source)

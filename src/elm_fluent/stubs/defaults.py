@@ -70,7 +70,7 @@ ELM_DEFAULT_IMPORTS = set(
         "uncurry",
         "Never",
         "never",
-        "List",
+        # "List",
         "::",
         # "Maybe", "Just", "Nothing",  - added below
         "Result",
@@ -114,3 +114,5 @@ Bool = types.Type("Bool", default_imports, constructors=["True", "False"])
 Maybe = types.Type(
     "Maybe a", default_imports, constructors=["Nothing", ("Just", types.TypeParam("a"))]
 )
+
+List = types.Type("List a", default_imports)

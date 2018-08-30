@@ -153,4 +153,6 @@ view model =
                                 (Date.fromTime ((1 * 3600 + 2 * 60 + 3) * 1000))
                         }
                 ]
+            , H.h2 [] [ H.text <| T.htmlTestsSectionTitle locale () ]
+            , H.p [] (T.simpleTextHtml locale ())
             ]

@@ -41,3 +41,7 @@ message-with-mixed-numeric-select = You have { $count ->
 date-tests-section-title = Dates tests
 
 here-is-a-date = Here is a formatted date: { DATETIME($mydate, day: "numeric", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit", second:"2-digit", hour12: 0, era:"short") }
+
+html-tests-section-title = HTML tests
+
+simple-text-html = Some text with this &amp; that
