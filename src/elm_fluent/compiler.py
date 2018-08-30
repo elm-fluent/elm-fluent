@@ -7,16 +7,10 @@ import attr
 import six
 from fluent.syntax import FluentParser, ast
 
-from . import codegen, exceptions, types
-from .stubs import (
-    defaults as dtypes,
-    intl_datetimeformat,
-    intl_numberformat,
-    intl_pluralrules,
-)
+from . import codegen, exceptions, html_compiler, types
+from .stubs import (defaults as dtypes, fluent, intl_datetimeformat, intl_locale,
+                    intl_numberformat, intl_pluralrules,)
 from .stubs.defaults import default_imports
-from .stubs.fluent import FluentDate, FluentNumber, module as fluent_module
-from .stubs.intl_locale import Locale, module as intl_locale_module
 
 try:
     from functools import singledispatch
@@ -128,11 +122,11 @@ def compile_messages(
         message_source=message_source,
     )
     module_imports = [
-        (intl_locale_module, "Locale"),
+        (intl_locale.module, "Locale"),
         (intl_numberformat.module, "NumberFormat"),
         (intl_datetimeformat.module, "DateTimeFormat"),
         (intl_pluralrules.module, "PluralRules"),
-        (fluent_module, "Fluent"),
+        (fluent.module, "Fluent"),
     ]
 
     module = codegen.Module(name=module_name)
@@ -249,8 +243,8 @@ def compile_master(module_name, locales, locale_modules, options):
     """
     errors = []
     module = codegen.Module(name=module_name)
-    module.add_import(intl_locale_module, "Locale")
-    module.add_import(fluent_module, "Fluent")
+    module.add_import(intl_locale.module, "Locale")
+    module.add_import(fluent.module, "Fluent")
     locale_module_local_names = {
         locale: module_name_for_locale(locale) for locale in locales
     }
@@ -722,7 +716,7 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
         if isinstance(selector_value, codegen.Number):
             inferred_key_type = dtypes.Number
         else:
-            inferred_key_type = FluentNumber
+            inferred_key_type = fluent.FluentNumber
     else:
         inferred_key_type = dtypes.String
 
@@ -742,7 +736,7 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
     if numeric_key:
         if selector_value.type == dtypes.Number:
             number_val = selector_value
-        elif selector_value.type == FluentNumber:
+        elif selector_value.type == fluent.FluentNumber:
             number_val = local_scope.variables["Fluent.numberValue"].apply(
                 selector_value
             )
@@ -956,11 +950,11 @@ class Stringable(codegen.Expression):
                 ),
                 self.expr,
             )
-        elif self.expr.type == FluentNumber:
+        elif self.expr.type == fluent.FluentNumber:
             self._finalized_expr = self.local_scope.variables[
                 "Fluent.formatNumber"
             ].apply(self.local_scope.variables[LOCALE_ARG_NAME], self.expr)
-        elif self.expr.type == FluentDate:
+        elif self.expr.type == fluent.FluentDate:
             self._finalized_expr = self.local_scope.variables[
                 "Fluent.formatDate"
             ].apply(self.local_scope.variables[LOCALE_ARG_NAME], self.expr)
@@ -1103,7 +1097,7 @@ class DateTimeFunction(FluentFunction):
         arg = args[0]
         if not kwargs:
             # Simply make sure it is a FluentDate
-            arg.constrain_type(FluentDate)
+            arg.constrain_type(fluent.FluentDate)
             # We will do a DateTimeFormat.format later
             return arg
         else:
@@ -1149,7 +1143,7 @@ class NumberFunction(FluentFunction):
             if isinstance(arg, codegen.Number):
                 return arg
             # Otherwise (external arguments) make it a FluentNumber
-            arg.constrain_type(FluentNumber)
+            arg.constrain_type(fluent.FluentNumber)
             # We will do a NumberFormat.format later
             return arg
 
