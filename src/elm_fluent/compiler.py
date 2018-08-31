@@ -8,8 +8,15 @@ import six
 from fluent.syntax import FluentParser, ast
 
 from . import codegen, exceptions, html_compiler, types
-from .stubs import (defaults as dtypes, fluent, html, intl_datetimeformat, intl_locale,
-                    intl_numberformat, intl_pluralrules,)
+from .stubs import (
+    defaults as dtypes,
+    fluent,
+    html,
+    intl_datetimeformat,
+    intl_locale,
+    intl_numberformat,
+    intl_pluralrules,
+)
 from .stubs.defaults import default_imports
 
 try:
@@ -157,7 +164,8 @@ def compile_messages(
         # TODO - Html type messages need an extra parameter for passing
         # attributes.
         function_type = types.Function.for_multiple_inputs(
-            [intl_locale.Locale, types.Record()], output_type_for_message_id(msg_id))
+            [intl_locale.Locale, types.Record()], output_type_for_message_id(msg_id)
+        )
         function_name = module.reserve_name(
             message_function_name_for_msg_id(msg_id), type=function_type
         )
@@ -183,8 +191,9 @@ def compile_messages(
 
     for msg_id in sorted_message_ids:
         msg = message_ids_to_ast[msg_id]
-        with compiler_env.modified(message_id=msg_id,
-                                   html_message=is_html_message_id(msg_id)):
+        with compiler_env.modified(
+            message_id=msg_id, html_message=is_html_message_id(msg_id)
+        ):
             function_name = compiler_env.message_mapping[msg_id]
 
             # The final function names need to be easily predictable. If we
@@ -270,7 +279,8 @@ def compile_master(module_name, locales, locale_modules, options):
 
     for func_name in all_sub_module_exports:
         function_type = types.Function.for_multiple_inputs(
-            [intl_locale.Locale, types.Record()], output_type_for_message_func_name(func_name)
+            [intl_locale.Locale, types.Record()],
+            output_type_for_message_func_name(func_name),
         )
         function_name = module.reserve_name(func_name, type=function_type)
         assert function_name == func_name, "{0} != {1} unexpectedly".format(
@@ -331,7 +341,9 @@ def is_html_message_func_name(func_name):
 
 
 def output_type_for_message_id(message_id):
-    return output_type_for_message_func_name(message_function_name_for_msg_id(message_id))
+    return output_type_for_message_func_name(
+        message_function_name_for_msg_id(message_id)
+    )
 
 
 def output_type_for_message_func_name(func_name):

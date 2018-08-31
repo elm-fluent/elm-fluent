@@ -1064,7 +1064,7 @@ class TestHtml(unittest.TestCase):
             textHtml locale_ args_ =
                 [ Html.text "Me & my friends"
                 ]
-            """
+            """,
         )
         self.assertEqual(errs, [])
 
@@ -1090,7 +1090,7 @@ class TestHtml(unittest.TestCase):
                             ]
                 , Html.text " text"
                 ]
-            """
+            """,
         )
         self.assertEqual(errs, [])
 
@@ -1108,6 +1108,6 @@ class TestHtml(unittest.TestCase):
             newTagHtml locale_ args_ =
                 [ Html.node "html5000newelement" [] []
                 ]
-            """
+            """,
         )
         self.assertEqual(errs, [])

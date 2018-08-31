@@ -117,13 +117,21 @@ ELEMENTS = [
 
 
 for element in ELEMENTS:
-    module.reserve_name(element,
-                        type=types.Function.for_multiple_inputs([dtypes.List.specialize(a=Attribute),
-                                                                 dtypes.List.specialize(a=Html)],
-                                                                Html))
+    module.reserve_name(
+        element,
+        type=types.Function.for_multiple_inputs(
+            [dtypes.List.specialize(a=Attribute), dtypes.List.specialize(a=Html)], Html
+        ),
+    )
 
-module.reserve_name("node",
-                    type=types.Function.for_multiple_inputs([dtypes.String,
-                                                             dtypes.List.specialize(a=Attribute),
-                                                             dtypes.List.specialize(a=Html)],
-                                                            Html))
+module.reserve_name(
+    "node",
+    type=types.Function.for_multiple_inputs(
+        [
+            dtypes.String,
+            dtypes.List.specialize(a=Attribute),
+            dtypes.List.specialize(a=Html),
+        ],
+        Html,
+    ),
+)
