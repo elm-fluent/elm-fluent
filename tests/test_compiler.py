@@ -1067,3 +1067,47 @@ class TestHtml(unittest.TestCase):
             """
         )
         self.assertEqual(errs, [])
+
+    def test_tags(self):
+        code, errs = compile_messages_to_elm(
+            """
+            tags-html = Some <b>bold text</b> and some <b>bold and <i>nested italic</i></b> text
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            tagsHtml : Locale.Locale -> a -> List (Html.Html msg)
+            tagsHtml locale_ args_ =
+                [ Html.text "Some "
+                , Html.b [] [ Html.text "bold text"
+                            ]
+                , Html.text " and some "
+                , Html.b [] [ Html.text "bold and "
+                            , Html.i [] [ Html.text "nested italic"
+                                        ]
+                            ]
+                , Html.text " text"
+                ]
+            """
+        )
+        self.assertEqual(errs, [])
+
+    def test_tags_not_builtin(self):
+        code, errs = compile_messages_to_elm(
+            """
+            new-tag-html = <html5000newelement></html5000newelement>
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            newTagHtml : Locale.Locale -> a -> List (Html.Html msg)
+            newTagHtml locale_ args_ =
+                [ Html.node "html5000newelement" [] []
+                ]
+            """
+        )
+        self.assertEqual(errs, [])
