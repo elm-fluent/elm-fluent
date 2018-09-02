@@ -1292,6 +1292,94 @@ class TestHtml(unittest.TestCase):
             errs[0].args[0], "Cannot use HTML message foo-html from plain text context."
         )
 
+    def test_select_expression_1(self):
+        # Test we get HTML handling of the pattern inside the select express
+        # i.e HTML context propagates
+        code, errs = compile_messages_to_elm(
+            """
+            hello-html = Hello { $gender ->
+               [male]    <b>Mr. { $surname }</b>, nice to see you
+               [female]  <b>Ms. { $surname }</b>, nice to see you
+              *[other]   <b>{ $surname }</b>, nice to see you
+             }
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            helloHtml : Locale.Locale -> { a | gender : String, surname : String } -> List (Html.Html msg)
+            helloHtml locale_ args_ =
+                List.concat [ [ Html.text "Hello "
+                              ]
+                            , case args_.gender of
+                                  "male" ->
+                                      [ Html.b [] [ Html.text "Mr. "
+                                                  , Html.text args_.surname
+                                                  ]
+                                      , Html.text ", nice to see you"
+                                      ]
+                                  "female" ->
+                                      [ Html.b [] [ Html.text "Ms. "
+                                                  , Html.text args_.surname
+                                                  ]
+                                      , Html.text ", nice to see you"
+                                      ]
+                                  _ ->
+                                      [ Html.b [] [ Html.text args_.surname
+                                                  ]
+                                      , Html.text ", nice to see you"
+                                      ]
+
+                            ]
+             """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_html_term_inline(self):
+        code, errs = compile_messages_to_elm(
+            """
+            welcome-html = Welcome to { -brand-html }
+            -brand-html = Awesomeness<sup>2</sup>
+            """,
+            self.locale,
+        )
+        # TODO - it would be nice to merge adjacent 'Html.text' calls here
+        self.assertCodeEqual(
+            code,
+            """
+            welcomeHtml : Locale.Locale -> a -> List (Html.Html msg)
+            welcomeHtml locale_ args_ =
+                [ Html.text "Welcome to "
+                , Html.text "Awesomeness"
+                , Html.sup [] [ Html.text "2"
+                              ]
+                ]
+            """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_plain_term_inline(self):
+        code, errs = compile_messages_to_elm(
+            """
+            welcome-html = Welcome to <b>{ -brand }</b>
+            -brand = Awesomeness2
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            welcomeHtml : Locale.Locale -> a -> List (Html.Html msg)
+            welcomeHtml locale_ args_ =
+                [ Html.text "Welcome to "
+                , Html.b [] [ Html.text "Awesomeness2"
+                            ]
+                ]
+            """,
+        )
+        self.assertEqual(errs, [])
+
     # TODO - check all CompilationError usages that assume String return type,
     # adjust for Html return types
 
