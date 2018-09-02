@@ -12,6 +12,7 @@ from .stubs import (
     defaults as dtypes,
     fluent,
     html,
+    html_attributes,
     intl_datetimeformat,
     intl_locale,
     intl_numberformat,
@@ -136,6 +137,7 @@ def compile_messages(
         (intl_pluralrules.module, "PluralRules"),
         (fluent.module, "Fluent"),
         (html.module, "Html"),
+        (html_attributes.module, "Attributes"),
     ]
 
     module = codegen.Module(name=module_name)

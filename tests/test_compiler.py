@@ -36,7 +36,7 @@ class TestCompiler(unittest.TestCase):
     maxDiff = None
 
     def assertCodeEqual(self, code1, code2):
-        self.assertEqual(normalize_elm(code1), normalize_elm(code2))
+        self.assertEqual(normalize_elm(code2), normalize_elm(code1))
 
     def test_single_string_literal(self):
         code, errs = compile_messages_to_elm(
@@ -1048,7 +1048,7 @@ class TestHtml(unittest.TestCase):
     maxDiff = None
 
     def assertCodeEqual(self, code1, code2):
-        self.assertEqual(normalize_elm(code1), normalize_elm(code2))
+        self.assertEqual(normalize_elm(code2), normalize_elm(code1))
 
     def test_text(self):
         code, errs = compile_messages_to_elm(
@@ -1107,6 +1107,49 @@ class TestHtml(unittest.TestCase):
             newTagHtml : Locale.Locale -> a -> List (Html.Html msg)
             newTagHtml locale_ args_ =
                 [ Html.node "html5000newelement" [] []
+                ]
+            """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_attributes(self):
+        code, errs = compile_messages_to_elm(
+            """
+            new-tag-html = <b id="myid" data-foo data-bar="baz">text</b>
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            newTagHtml : Locale.Locale -> a -> List (Html.Html msg)
+            newTagHtml locale_ args_ =
+                [ Html.b [ Attributes.attribute "data-bar" "baz"
+                         , Attributes.attribute "data-foo" ""
+                         , Attributes.id "myid"
+                         ] [ Html.text "text"
+                           ]
+                ]
+            """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_class_attributes(self):
+        # Check we work around bs4 'helpfulness'
+        code, errs = compile_messages_to_elm(
+            """
+            new-tag-html = <b class="foo">text</b>
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            newTagHtml : Locale.Locale -> a -> List (Html.Html msg)
+            newTagHtml locale_ args_ =
+                [ Html.b [ Attributes.class "foo"
+                         ] [ Html.text "text"
+                           ]
                 ]
             """,
         )

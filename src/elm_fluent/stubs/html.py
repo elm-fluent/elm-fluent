@@ -14,6 +14,9 @@ Attribute = types.Type("Attribute msg", module)
 
 module.reserve_name("text", type=types.Function(dtypes.String, Html))
 
+# From https://package.elm-lang.org/packages/elm-lang/html/latest/Html
+# Only the ones with the signature:
+#   List (Attribute msg) -> List (Html msg) -> Html msg
 ELEMENTS = [
     "h1",
     "h2",

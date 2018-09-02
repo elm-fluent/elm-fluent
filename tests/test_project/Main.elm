@@ -155,4 +155,6 @@ view model =
                 ]
             , H.h2 [] [ H.text <| T.htmlTestsSectionTitle locale () ]
             , H.p [] (T.simpleTextHtml locale ())
+            , H.p [] (T.tagsHtml locale ())
+            , H.p [] (T.attributesHtml locale ())
             ]

@@ -92,3 +92,8 @@ class TestEndToEnd(unittest.TestCase):
 
         # Html:
         self.assertIn("Some text with this &amp; that", page_source)
+        self.assertIn(
+            "Some <b>bold text</b> and some <b>bold <i>and italic</i></b> text.",
+            page_source,
+        )
+        self.assertIn("Some text with this &amp; that", page_source)

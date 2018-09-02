@@ -44,4 +44,8 @@ here-is-a-date = Here is a formatted date: { DATETIME($mydate, day: "numeric", m
 
 html-tests-section-title = HTML tests
 
-simple-text-html = Some text with this &amp; that
+simple-text-html = Some text with this &amp; that.
+
+tags-html = Some <b>bold text</b> and some <b>bold <i>and italic</i></b> text.
+
+attributes-html = Some <span class="foo">highlighted text</span>.

@@ -15,7 +15,7 @@ def normalize_elm(text):
 
 class TestCodeGen(unittest.TestCase):
     def assertCodeEqual(self, code1, code2):
-        self.assertEqual(normalize_elm(code1), normalize_elm(code2))
+        self.assertEqual(normalize_elm(code2), normalize_elm(code1))
 
     def test_module_builtins(self):
         module = codegen.Module()
