@@ -3,10 +3,8 @@ Types for Html.Attributes module
 """
 from __future__ import absolute_import, unicode_literals
 
+from . import defaults as dtypes, html
 from .. import codegen, types
-from . import defaults as dtypes
-
-from . import html
 
 module = codegen.Module(name="Html.Attributes")
 

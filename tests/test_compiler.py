@@ -5,7 +5,7 @@ import unittest
 import babel
 
 from elm_fluent import exceptions
-from elm_fluent.compiler import compile_messages
+from elm_fluent.compiler import compile_messages, message_function_name_for_msg_id
 
 from .test_codegen import normalize_elm
 from .utils import dedent_ftl
@@ -37,6 +37,15 @@ class TestCompiler(unittest.TestCase):
 
     def assertCodeEqual(self, code1, code2):
         self.assertEqual(normalize_elm(code2), normalize_elm(code1))
+
+    def test_message_function_name_for_msg_id(self):
+        self.assertEqual(message_function_name_for_msg_id("hello"), "hello")
+        self.assertEqual(message_function_name_for_msg_id("hello-there"), "helloThere")
+        self.assertEqual(message_function_name_for_msg_id("helloThere"), "helloThere")
+        self.assertEqual(message_function_name_for_msg_id("hello.foo"), "hello_foo")
+        self.assertEqual(
+            message_function_name_for_msg_id("hello-html.foo"), "helloHtml_foo"
+        )
 
     def test_single_string_literal(self):
         code, errs = compile_messages_to_elm(
@@ -1154,3 +1163,136 @@ class TestHtml(unittest.TestCase):
             """,
         )
         self.assertEqual(errs, [])
+
+    def test_argument(self):
+        code, errs = compile_messages_to_elm(
+            """
+            hello-html = Hello <b>{ $username }</b>!
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            helloHtml : Locale.Locale -> { a | username : String } -> List (Html.Html msg)
+            helloHtml locale_ args_ =
+                [ Html.text "Hello "
+                , Html.b [] [ Html.text args_.username
+                            ]
+                , Html.text "!"
+                ]
+             """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_text_message_call(self):
+        code, errs = compile_messages_to_elm(
+            """
+            welcome-back = Welcome back!
+            hello-html = Hello, friend! <b>{ welcome-back }</b>
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            welcomeBack : Locale.Locale -> a -> String
+            welcomeBack locale_ args_ =
+                "Welcome back!"
+
+            helloHtml : Locale.Locale -> a -> List (Html.Html msg)
+            helloHtml locale_ args_ =
+                [ Html.text "Hello, friend! "
+                , Html.b [] [ Html.text (welcomeBack locale_ args_)
+                            ]
+                ]
+             """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_html_message_call(self):
+        code, errs = compile_messages_to_elm(
+            """
+            welcome-html = Welcome to <b>Awesome site!</b>
+            hello-html = Hello! { welcome-html }
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            welcomeHtml : Locale.Locale -> a -> List (Html.Html msg)
+            welcomeHtml locale_ args_ =
+                [ Html.text "Welcome to "
+                , Html.b [] [ Html.text "Awesome site!"
+                            ]
+                ]
+
+            helloHtml : Locale.Locale -> a -> List (Html.Html msg)
+            helloHtml locale_ args_ =
+                List.concat [ [ Html.text "Hello! "
+                              ]
+                            , welcomeHtml locale_ args_
+                            ]
+             """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_text_message_call_attribute(self):
+        code, errs = compile_messages_to_elm(
+            """
+            hello-html = Hello <b data-foo="&lt;stuff&gt; { hello-html.foo }">friend</b>
+                      .foo = <xxx>
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            helloHtml : Locale.Locale -> a -> List (Html.Html msg)
+            helloHtml locale_ args_ =
+                [ Html.text "Hello "
+                , Html.b [ Attributes.attribute "data-foo" (String.concat [ "<stuff> "
+                                                                          , helloHtml_foo locale_ args_
+                                                                          ])
+                         ] [ Html.text "friend"
+                           ]
+                ]
+
+            helloHtml_foo : Locale.Locale -> a -> String
+            helloHtml_foo locale_ args_ =
+                "<xxx>"
+            """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_html_message_call_attribute(self):
+        code, errs = compile_messages_to_elm(
+            """
+            hello-html = Hello <b class="{ foo-html }">friend</b>
+            foo-html = Foo
+            """,
+            self.locale,
+        )
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(
+            errs[0].args[0], "Cannot use HTML message foo-html from plain text context."
+        )
+
+    def test_html_message_call_from_plain_test(self):
+        code, errs = compile_messages_to_elm(
+            """
+            hello = Hello { foo-html }
+            foo-html = Foo
+            """,
+            self.locale,
+        )
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(
+            errs[0].args[0], "Cannot use HTML message foo-html from plain text context."
+        )
+
+    # TODO - check all CompilationError usages that assume String return type,
+    # adjust for Html return types
+
+    # TODO term inlining

@@ -8,10 +8,10 @@ import time
 import unittest
 
 from click.testing import CliRunner
+from pyvirtualdisplay import Display
 from selenium import webdriver
 
 from elm_fluent import cli
-from pyvirtualdisplay import Display
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 TEST_PROJECT = os.path.join(THIS_DIR, "test_project")
@@ -96,4 +96,7 @@ class TestEndToEnd(unittest.TestCase):
             "Some <b>bold text</b> and some <b>bold <i>and italic</i></b> text.",
             page_source,
         )
-        self.assertIn("Some text with this &amp; that", page_source)
+        self.assertIn('Some <span class="foo">highlighted text</span>.', page_source)
+        self.assertIn("Hello <b>Mary</b>!", page_source)
+        self.assertIn("Hello <b>Maria</b>! You came back", page_source)
+        self.assertIn('<b foo="Hello">Some text</b>', page_source)

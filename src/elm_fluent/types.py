@@ -8,6 +8,7 @@ import six
 
 from . import exceptions
 
+
 # This module is the heart of the type tracking the compiler does. Types are
 # associated with node objects in the codegen.py. It is currently rather adhoc
 # and incomplete, but suffices for our purposes.

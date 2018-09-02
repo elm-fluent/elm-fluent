@@ -5,6 +5,7 @@ from collections import OrderedDict
 
 import attr
 import six
+
 from fluent.syntax import FluentParser, ast
 
 from . import codegen, exceptions, html_compiler, types
@@ -50,7 +51,7 @@ class CurrentEnvironment(object):
     # The parts of CompilerEnvironment that we want to mutate (and restore)
     # temporarily for some parts of a call chain.
     message_id = attr.ib(default=None)
-    html_message = attr.ib(default=False)
+    html_context = attr.ib(default=False)
 
 
 @attr.s
@@ -194,7 +195,7 @@ def compile_messages(
     for msg_id in sorted_message_ids:
         msg = message_ids_to_ast[msg_id]
         with compiler_env.modified(
-            message_id=msg_id, html_message=is_html_message_id(msg_id)
+            message_id=msg_id, html_context=is_html_message_id(msg_id)
         ):
             function_name = compiler_env.message_mapping[msg_id]
 
@@ -350,7 +351,7 @@ def output_type_for_message_id(message_id):
 
 def output_type_for_message_func_name(func_name):
     if func_name.endswith("Html"):
-        return dtypes.List.specialize(a=html.Html)
+        return html_compiler.html_output_type
     else:
         return dtypes.String
 
@@ -393,15 +394,19 @@ def message_function_name_for_msg_id(msg_id):
     # Scope.reserve_name does further sanitising of name, which we don't need to
     # worry about.
 
-    # Remove '-' and replace with camelCaps
-    parts = msg_id.rstrip("_").rstrip("-").split("-")
-    joined = []
-    for i, part in enumerate(parts):
-        if i > 0:
-            part = part.title()
-        joined.append(part)
+    sections = []
+    for section in msg_id.split("."):
+        # Remove '-' and replace with camelCaps
+        parts = section.rstrip("_").rstrip("-").split("-")
+        joined = []
+        for i, part in enumerate(parts):
+            if i > 0:
+                part = part.title()
+            joined.append(part)
 
-    return "".join(joined).replace(".", "_")
+        section_name = "".join(joined)
+        sections.append(section_name)
+    return "_".join(sections)
 
 
 def compile_message(msg, msg_id, function_name, module, compiler_env):
@@ -602,7 +607,7 @@ def compile_expr_pattern(pattern, local_scope, compiler_env):
 
     use_isolating = compiler_env.use_isolating and len(subelements) > 1
 
-    if compiler_env.current.html_message:
+    if compiler_env.current.html_context:
         return html_compiler.compile_pattern(pattern, local_scope, compiler_env)
 
     for element in pattern.elements:
@@ -617,7 +622,7 @@ def compile_expr_pattern(pattern, local_scope, compiler_env):
         if wrap_this_with_isolating:
             parts.append(codegen.String(PDI))
 
-    return codegen.Concat(parts)
+    return codegen.StringConcat(parts)
 
 
 @compile_expr.register(ast.TextElement)
@@ -674,6 +679,20 @@ def compile_expr_term_reference(reference, local_scope, compiler_env):
 def do_message_call(name, local_scope, expr, compiler_env):
     if name in compiler_env.message_mapping:
         msg_func_name = compiler_env.message_mapping[name]
+        # If in HTML context, can call either plain or HTML.
+        # But plain text context cannot call HTML context
+        if not compiler_env.current.html_context:
+            if is_html_message_id(name):
+                compiler_env.add_current_message_error(
+                    exceptions.HtmlTypeMismatch(
+                        "Cannot use HTML message {0} from plain text context.".format(
+                            name
+                        )
+                    ),
+                    expr,
+                )
+                return codegen.CompilationError(dtypes.String)
+
         return local_scope.variables[msg_func_name].apply(
             *[local_scope.variables[a] for a in MESSAGE_FUNCTION_ARGS]
         )

@@ -49,3 +49,10 @@ simple-text-html = Some text with this &amp; that.
 tags-html = Some <b>bold text</b> and some <b>bold <i>and italic</i></b> text.
 
 attributes-html = Some <span class="foo">highlighted text</span>.
+
+argument-html = Hello <b>{ $username }</b>!
+
+html-message-reference-html = { argument-html } You came back
+
+attribute-substitution-html = <b foo="{ attribute-substitution-html.foo }">Some text</b>
+                            .foo = Hello

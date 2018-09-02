@@ -38,5 +38,9 @@ class TypeMismatch(FluentError):
     pass
 
 
+class HtmlTypeMismatch(FluentError):
+    pass
+
+
 class FunctionParameterError(FluentError):
     pass

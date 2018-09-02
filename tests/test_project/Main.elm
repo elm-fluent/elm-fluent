@@ -157,4 +157,7 @@ view model =
             , H.p [] (T.simpleTextHtml locale ())
             , H.p [] (T.tagsHtml locale ())
             , H.p [] (T.attributesHtml locale ())
+            , H.p [] (T.argumentHtml locale { username = "Mary" })
+            , H.p [] (T.htmlMessageReferenceHtml locale { username = "Maria" })
+            , H.p [] (T.attributeSubstitutionHtml locale ())
             ]

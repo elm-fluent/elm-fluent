@@ -4,7 +4,6 @@ import os
 import os.path
 
 import click
-
 import language_tags
 
 from .compiler import compile_master, compile_messages, module_name_for_locale

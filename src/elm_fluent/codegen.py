@@ -483,8 +483,9 @@ class fixed_type(object):
             return self._resolve_type()
 
     def __set__(self, obj, value):
-        assert value is self._resolve_type()
-        pass
+        assert value is self._resolve_type(), "Expected {0} is {1}".format(
+            value, self._resolve_type()
+        )
 
 
 class SourceCodeBuilder(object):
@@ -809,8 +810,6 @@ class List(Bracketing, Expression):
 
 
 class Concat(Expression):
-    type = fixed_type("String")
-
     def __init__(self, parts):
         self.parts = parts
 
@@ -826,22 +825,22 @@ class Concat(Expression):
             part.type = type_obj.constrain(part.type)
 
     def build_source(self, builder):
-        builder.add_part("String.concat ")
+        builder.add_part(self.function_call + " ")
         List(self.parts).build_source(builder)
 
     def simplify(self, changes):
         # Simplify sub parts
         self.parts = [part.simplify(changes) for part in self.parts]
 
-        # Merge adjacent String objects.
+        # Merge adjacent List(like) objects.
         new_parts = []
         for part in self.parts:
             if (
                 len(new_parts) > 0
-                and isinstance(new_parts[-1], String)
-                and isinstance(part, String)
+                and isinstance(new_parts[-1], self.literal)
+                and isinstance(part, self.literal)
             ):
-                new_parts[-1] = String(new_parts[-1].string_value + part.string_value)
+                new_parts[-1] = self.merge_two(new_parts[-1], part)
             else:
                 new_parts.append(part)
         if len(new_parts) < len(self.parts):
@@ -851,12 +850,49 @@ class Concat(Expression):
         # See if we can eliminate the Concat altogether
         if len(self.parts) == 0:
             changes.append(True)
-            return String("")
+            return self.empty()
         elif len(self.parts) == 1:
             changes.append(True)
             return self.parts[0]
         else:
             return self
+
+
+class StringConcat(Concat):
+    type = fixed_type("String")
+    literal = String
+    function_call = "String.concat"
+
+    def empty(self):
+        return String("")
+
+    def merge_two(self, part1, part2):
+        return String(part1.string_value + part2.string_value)
+
+
+class ListConcat(Concat):
+    @property
+    def type(self):
+        return self._type
+
+    @type.setter
+    def type(self, type_obj):
+        assert type_obj == self._type, "Expected {0} == {1}".format(
+            type_obj, self._type
+        )
+
+    def __init__(self, parts, type_obj):
+        self.parts = parts
+        self._type = type_obj
+
+    literal = List
+    function_call = "List.concat"
+
+    def empty(self):
+        return List([])
+
+    def merge_two(self, part1, part2):
+        return List(part1.items + part2.items)
 
 
 class VariableReference(Expression):

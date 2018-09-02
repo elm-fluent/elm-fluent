@@ -319,12 +319,12 @@ class TestCodeGen(unittest.TestCase):
         )
 
     def test_string_join_empty(self):
-        join = codegen.Concat([])
+        join = codegen.StringConcat([])
         join = codegen.simplify(join)
         self.assertCodeEqual(join.as_source_code(), '""')
 
     def test_string_join_one(self):
-        join = codegen.Concat([codegen.String("hello")])
+        join = codegen.StringConcat([codegen.String("hello")])
         join = codegen.simplify(join)
         self.assertCodeEqual(join.as_source_code(), '"hello"')
 
@@ -332,7 +332,7 @@ class TestCodeGen(unittest.TestCase):
         scope = codegen.Scope()
         scope.reserve_name("tmp")
         var = scope.variables["tmp"]
-        join = codegen.Concat([codegen.String("hello "), var])
+        join = codegen.StringConcat([codegen.String("hello "), var])
         self.assertCodeEqual(
             join.as_source_code(),
             """
@@ -346,7 +346,7 @@ class TestCodeGen(unittest.TestCase):
         scope = codegen.Scope()
         scope.reserve_name("tmp")
         var = scope.variables["tmp"]
-        join1 = codegen.Concat(
+        join1 = codegen.StringConcat(
             [
                 codegen.String("hello "),
                 codegen.String("there "),
