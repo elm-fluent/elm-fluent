@@ -82,9 +82,9 @@ Ready to contribute? Here's how to set up `elm_fluent` for local development.
     $ deactivate
     $ workon elm_fluent
 
-  And then install things into it::
+   And then install things into it::
 
-    $ npm install -g elm elm-test elm-github-install
+    $ npm install -g elm@0.18 elm-test@0.18 elm-github-install
 
 4. Create a branch for local development::
 
