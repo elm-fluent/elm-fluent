@@ -18,9 +18,14 @@ def compile_messages_to_elm(
     include_module_line=False,
     include_imports=False,
     use_isolating=False,
+    dynamic_html_attributes=True,
 ):
     module, errors = compile_messages(
-        dedent_ftl(source), locale, module_name=module_name, use_isolating=use_isolating
+        dedent_ftl(source),
+        locale,
+        module_name=module_name,
+        use_isolating=use_isolating,
+        dynamic_html_attributes=dynamic_html_attributes,
     )
     return (
         module.as_source_code(
@@ -1069,8 +1074,8 @@ class TestHtml(unittest.TestCase):
         self.assertCodeEqual(
             code,
             """
-            textHtml : Locale.Locale -> a -> List (Html.Html msg)
-            textHtml locale_ args_ =
+            textHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            textHtml locale_ args_ attrs_ =
                 [ Html.text "Me & my friends"
                 ]
             """,
@@ -1083,12 +1088,13 @@ class TestHtml(unittest.TestCase):
             tags-html = Some <b>bold text</b> and some <b>bold and <i>nested italic</i></b> text
             """,
             self.locale,
+            dynamic_html_attributes=False,
         )
         self.assertCodeEqual(
             code,
             """
-            tagsHtml : Locale.Locale -> a -> List (Html.Html msg)
-            tagsHtml locale_ args_ =
+            tagsHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            tagsHtml locale_ args_ attrs_ =
                 [ Html.text "Some "
                 , Html.b [] [ Html.text "bold text"
                             ]
@@ -1109,30 +1115,32 @@ class TestHtml(unittest.TestCase):
             new-tag-html = <html5000newelement></html5000newelement>
             """,
             self.locale,
+            dynamic_html_attributes=False,
         )
         self.assertCodeEqual(
             code,
             """
-            newTagHtml : Locale.Locale -> a -> List (Html.Html msg)
-            newTagHtml locale_ args_ =
+            newTagHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            newTagHtml locale_ args_ attrs_ =
                 [ Html.node "html5000newelement" [] []
                 ]
             """,
         )
         self.assertEqual(errs, [])
 
-    def test_attributes(self):
+    def test_static_attributes(self):
         code, errs = compile_messages_to_elm(
             """
-            new-tag-html = <b id="myid" data-foo data-bar="baz">text</b>
+            tag-html = <b id="myid" data-foo data-bar="baz">text</b>
             """,
             self.locale,
+            dynamic_html_attributes=False,
         )
         self.assertCodeEqual(
             code,
             """
-            newTagHtml : Locale.Locale -> a -> List (Html.Html msg)
-            newTagHtml locale_ args_ =
+            tagHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            tagHtml locale_ args_ attrs_ =
                 [ Html.b [ Attributes.attribute "data-bar" "baz"
                          , Attributes.attribute "data-foo" ""
                          , Attributes.id "myid"
@@ -1150,15 +1158,46 @@ class TestHtml(unittest.TestCase):
             new-tag-html = <b class="foo">text</b>
             """,
             self.locale,
+            dynamic_html_attributes=False,
         )
         self.assertCodeEqual(
             code,
             """
-            newTagHtml : Locale.Locale -> a -> List (Html.Html msg)
-            newTagHtml locale_ args_ =
+            newTagHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            newTagHtml locale_ args_ attrs_ =
                 [ Html.b [ Attributes.class "foo"
                          ] [ Html.text "text"
                            ]
+                ]
+            """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_dynamic_attributes(self):
+        code, errs = compile_messages_to_elm(
+            """
+            attributes-html = <b class="foo" data-foo>text</b>
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            attributesHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            attributesHtml locale_ args_ attrs_ =
+                [ Html.b (List.concat [ [ Attributes.class "foo"
+                                        , Attributes.attribute "data-foo" ""
+                                        ]
+                                      , Fluent.selectAttributes attrs_ [ "b"
+                                                                       , ".foo"
+                                                                       , "b.foo"
+                                                                       , "[data-foo]"
+                                                                       , "b[data-foo]"
+                                                                       , "[data-foo=\\"\\"]"
+                                                                       , "b[data-foo=\\"\\"]"
+                                                                       ]
+                                      ]) [ Html.text "text"
+                                         ]
                 ]
             """,
         )
@@ -1170,12 +1209,13 @@ class TestHtml(unittest.TestCase):
             hello-html = Hello <b>{ $username }</b>!
             """,
             self.locale,
+            dynamic_html_attributes=False,
         )
         self.assertCodeEqual(
             code,
             """
-            helloHtml : Locale.Locale -> { a | username : String } -> List (Html.Html msg)
-            helloHtml locale_ args_ =
+            helloHtml : Locale.Locale -> { a | username : String } -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            helloHtml locale_ args_ attrs_ =
                 [ Html.text "Hello "
                 , Html.b [] [ Html.text args_.username
                             ]
@@ -1192,6 +1232,7 @@ class TestHtml(unittest.TestCase):
             hello-html = Hello, friend! <b>{ welcome-back }</b>
             """,
             self.locale,
+            dynamic_html_attributes=False,
         )
         self.assertCodeEqual(
             code,
@@ -1200,8 +1241,8 @@ class TestHtml(unittest.TestCase):
             welcomeBack locale_ args_ =
                 "Welcome back!"
 
-            helloHtml : Locale.Locale -> a -> List (Html.Html msg)
-            helloHtml locale_ args_ =
+            helloHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            helloHtml locale_ args_ attrs_ =
                 [ Html.text "Hello, friend! "
                 , Html.b [] [ Html.text (welcomeBack locale_ args_)
                             ]
@@ -1217,22 +1258,23 @@ class TestHtml(unittest.TestCase):
             hello-html = Hello! { welcome-html }
             """,
             self.locale,
+            dynamic_html_attributes=False,
         )
         self.assertCodeEqual(
             code,
             """
-            welcomeHtml : Locale.Locale -> a -> List (Html.Html msg)
-            welcomeHtml locale_ args_ =
+            welcomeHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            welcomeHtml locale_ args_ attrs_ =
                 [ Html.text "Welcome to "
                 , Html.b [] [ Html.text "Awesome site!"
                             ]
                 ]
 
-            helloHtml : Locale.Locale -> a -> List (Html.Html msg)
-            helloHtml locale_ args_ =
+            helloHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            helloHtml locale_ args_ attrs_ =
                 List.concat [ [ Html.text "Hello! "
                               ]
-                            , welcomeHtml locale_ args_
+                            , welcomeHtml locale_ args_ attrs_
                             ]
              """,
         )
@@ -1245,12 +1287,13 @@ class TestHtml(unittest.TestCase):
                       .foo = <xxx>
             """,
             self.locale,
+            dynamic_html_attributes=False,
         )
         self.assertCodeEqual(
             code,
             """
-            helloHtml : Locale.Locale -> a -> List (Html.Html msg)
-            helloHtml locale_ args_ =
+            helloHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            helloHtml locale_ args_ attrs_ =
                 [ Html.text "Hello "
                 , Html.b [ Attributes.attribute "data-foo" (String.concat [ "<stuff> "
                                                                           , helloHtml_foo locale_ args_
@@ -1304,12 +1347,13 @@ class TestHtml(unittest.TestCase):
              }
             """,
             self.locale,
+            dynamic_html_attributes=False,
         )
         self.assertCodeEqual(
             code,
             """
-            helloHtml : Locale.Locale -> { a | gender : String, surname : String } -> List (Html.Html msg)
-            helloHtml locale_ args_ =
+            helloHtml : Locale.Locale -> { a | gender : String, surname : String } -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            helloHtml locale_ args_ attrs_ =
                 List.concat [ [ Html.text "Hello "
                               ]
                             , case args_.gender of
@@ -1343,13 +1387,14 @@ class TestHtml(unittest.TestCase):
             -brand-html = Awesomeness<sup>2</sup>
             """,
             self.locale,
+            dynamic_html_attributes=False,
         )
         # TODO - it would be nice to merge adjacent 'Html.text' calls here
         self.assertCodeEqual(
             code,
             """
-            welcomeHtml : Locale.Locale -> a -> List (Html.Html msg)
-            welcomeHtml locale_ args_ =
+            welcomeHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            welcomeHtml locale_ args_ attrs_ =
                 [ Html.text "Welcome to "
                 , Html.text "Awesomeness"
                 , Html.sup [] [ Html.text "2"
@@ -1366,12 +1411,13 @@ class TestHtml(unittest.TestCase):
             -brand = Awesomeness2
             """,
             self.locale,
+            dynamic_html_attributes=False,
         )
         self.assertCodeEqual(
             code,
             """
-            welcomeHtml : Locale.Locale -> a -> List (Html.Html msg)
-            welcomeHtml locale_ args_ =
+            welcomeHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            welcomeHtml locale_ args_ attrs_ =
                 [ Html.text "Welcome to "
                 , Html.b [] [ Html.text "Awesomeness2"
                             ]

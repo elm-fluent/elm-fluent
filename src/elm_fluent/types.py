@@ -8,7 +8,6 @@ import six
 
 from . import exceptions
 
-
 # This module is the heart of the type tracking the compiler does. Types are
 # associated with node objects in the codegen.py. It is currently rather adhoc
 # and incomplete, but suffices for our purposes.
@@ -33,7 +32,8 @@ from . import exceptions
 # However, for item 1, while the current code worked OK initially, after the
 # addition of type parameters there are now many bugs e.g. an expression like
 # `Maybe.Just.apply(codegen.Number(1))` should have a type of 'Maybe Int', but
-# actually returns 'Maybe a'.
+# actually returns 'Maybe a', all TypeParams are considered equal to each other
+# etc.
 #
 # These do not currently affect the correctness of output. To fix these issues,
 # and others marked as TODO in this module, it would probably be best to start
@@ -101,6 +101,12 @@ class TypeParam(UnconstrainedType):
     def __init__(self, preferred_name):
         self.preferred_name = preferred_name
 
+    def constrain(self, other):
+        if isinstance(other, UnconstrainedType):
+            return self
+        else:
+            return other
+
     @with_auto_env
     def as_signature(self, from_module, env=None):
         for v, t in env.used_type_variables.items():
@@ -113,6 +119,11 @@ class TypeParam(UnconstrainedType):
             candidate = "{0}{1}".format(self.preferred_name, c)
         env.used_type_variables[candidate] = self
         return candidate
+
+    def __eq__(self, other):
+        # This is a really weak check, but deliberately relaxes things enough
+        # so we can easily get signatures to work the way we need
+        return isinstance(other, TypeParam)
 
 
 # TODO - need to support type parameters, otherwise 'Maybe Int' is considered
@@ -242,8 +253,26 @@ class Type(ElmType):
         return retval
 
 
+class Tuple(Type):
+    def __init__(self, *param_types):
+        type_params = [
+            TypeParam(six.unichr(ord("a") + i)) for i in range(len(param_types))
+        ]
+        super(Tuple, self).__init__("Tuple", None, params=type_params)
+        for type_param, param_type in zip(type_params, param_types):
+            self.param_dict[type_param.preferred_name] = param_type
+
+    @with_auto_env
+    def as_signature(self, from_module, env=None):
+        return "({0})".format(
+            ", ".join(
+                t.as_signature(from_module, env=env) for n, t in self.param_dict.items()
+            )
+        )
+
+
 def type_paren_wrap(sig):
-    if " " in sig:
+    if " " in sig and not (sig.startswith("(") and sig.endswith(")")):
         return "({0})".format(sig)
     else:
         return sig

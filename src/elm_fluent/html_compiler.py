@@ -5,7 +5,6 @@ import re
 
 import bs4
 import six
-
 from fluent.syntax import ast
 
 from . import codegen
@@ -74,7 +73,7 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
         else:
             assert isinstance(node, bs4.element.Tag)
             tag_name = node.name.lower()
-            attributes = []
+            static_attributes = []
             for attr_name, attr_value in sorted(node.attrs.items()):
                 if isinstance(attr_value, list):
                     # Bs4 treats class attribute differently, returns a list, which we convert
@@ -103,7 +102,24 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
                     attr_constructor = local_scope.variables[
                         "Attributes.attribute"
                     ].apply(codegen.String(attr_name))
-                attributes.append(attr_constructor.apply(attr_final_value))
+                static_attributes.append(attr_constructor.apply(attr_final_value))
+
+            if compiler_env.dynamic_html_attributes:
+                selectors_for_node = codegen.List(
+                    list(map(codegen.String, get_selectors_for_node(node)))
+                )
+                dynamic_attributes = local_scope.variables[
+                    "Fluent.selectAttributes"
+                ].apply(
+                    local_scope.variables[compiler.ATTRS_ARG_NAME], selectors_for_node
+                )
+            else:
+                dynamic_attributes = codegen.List([])
+            attributes = codegen.ListConcat(
+                [codegen.List(static_attributes), dynamic_attributes],
+                dtypes.List.specialize(a=html.Attribute),
+            )
+
             sub_items = dom_nodes_to_elm(
                 list(node.children), expr_replacements, local_scope, compiler_env
             )
@@ -113,7 +129,7 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
                 node_constructor = local_scope.variables["Html.node"].apply(
                     codegen.String(tag_name)
                 )
-            item = node_constructor.apply(codegen.List(attributes), sub_items)
+            item = node_constructor.apply(attributes, sub_items)
             items.append(codegen.List([item]))
 
     return codegen.ListConcat(items, html_output_type)
@@ -157,6 +173,35 @@ def interpolate_replacements(text, expr_replacements):
     )
     split_text = [p for p in splitter.split(text) if p]
     return [expr_replacements.get(t, t) for t in split_text]
+
+
+def get_selectors_for_node(node):
+    tag_name = node.name.lower()
+    yield tag_name
+
+    classes = node.attrs.get("class", [])
+    for class_ in classes:
+        class_selector = ".{0}".format(class_)
+        yield class_selector
+        yield tag_name + class_selector
+
+    id = node.attrs.get("id", None)
+    if id is not None:
+        id_selector = "#{0}".format(id)
+        yield id_selector
+        yield tag_name + id_selector
+
+    for attr_name, attr_value in sorted(node.attrs.items()):
+        if attr_name in ["id", "class"]:
+            continue
+
+        attr_present_selector = "[{0}]".format(attr_name)
+        yield attr_present_selector
+        yield tag_name + attr_present_selector
+
+        attr_value_selector = '[{0}="{1}"]'.format(attr_name, attr_value)
+        yield attr_value_selector
+        yield tag_name + attr_value_selector
 
 
 from . import compiler  # flake8: noqa  isort:skip

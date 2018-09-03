@@ -11,7 +11,6 @@ import six
 
 from . import exceptions, types
 
-
 # This module provides simple utilities for building up Elm source code. It
 # implements only what is really needed by compiler.py, with a number of aims
 # and constraints:

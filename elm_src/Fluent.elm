@@ -1,4 +1,4 @@
-module Fluent exposing (FluentNumber, number, formattedNumber, reformattedNumber, numberFormattingOptions, formatNumber, numberValue, FluentDate, date, formattedDate, reformattedDate, dateFormattingOptions, formatDate)
+module Fluent exposing (FluentNumber, number, formattedNumber, reformattedNumber, numberFormattingOptions, formatNumber, numberValue, FluentDate, date, formattedDate, reformattedDate, dateFormattingOptions, formatDate, selectAttributes)
 
 {-| Helpers and types for the elm-fluent i18n system
 
@@ -19,12 +19,16 @@ module Fluent exposing (FluentNumber, number, formattedNumber, reformattedNumber
 
 # Other
 @docs dateFormattingOptions, reformattedDate, formatDate
+
+# Utils
+@docs selectAttributes
 -}
 
 import Intl.NumberFormat as NumberFormat
 import Intl.DateTimeFormat as DateTimeFormat
 import Intl.Locale as Locale
 import Date as Date
+import Html as Html
 
 
 {-| A number that can be passed to Fluent message functions, with optional formatting options specified
@@ -150,3 +154,18 @@ Intended for use by ftl2elm, not normally used directly
 formatDate : Locale.Locale -> FluentDate -> String
 formatDate locale (FluentDate opts d) =
     DateTimeFormat.format (DateTimeFormat.fromOptions { opts | locale = locale }) d
+
+
+{-| Select attributes for an Html node
+
+Intended for use by ftl2elm, not normally used otherwise
+-}
+selectAttributes : List ( String, List (Html.Attribute msg) ) -> List String -> List (Html.Attribute msg)
+selectAttributes attrList selectors =
+    attrList
+        |> List.filter
+            (\( selector, aList ) ->
+                List.member selector selectors
+            )
+        |> List.map Tuple.second
+        |> List.concat

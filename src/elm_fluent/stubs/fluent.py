@@ -6,6 +6,7 @@ from __future__ import absolute_import, unicode_literals
 from . import (
     date,
     defaults as dtypes,
+    html,
     intl_datetimeformat,
     intl_locale,
     intl_numberformat,
@@ -77,5 +78,19 @@ module.reserve_name(
     "formatDate",
     type=types.Function.for_multiple_inputs(
         [intl_locale.Locale, FluentDate], dtypes.String
+    ),
+)
+
+
+module.reserve_name(
+    "selectAttributes",
+    type=types.Function.for_multiple_inputs(
+        [
+            dtypes.List.specialize(
+                a=types.Tuple(dtypes.String, dtypes.List.specialize(a=html.Attribute))
+            ),
+            dtypes.List.specialize(a=dtypes.String),
+        ],
+        dtypes.List.specialize(a=html.Attribute),
     ),
 )

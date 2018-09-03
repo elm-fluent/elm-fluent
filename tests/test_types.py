@@ -162,6 +162,19 @@ class TestTypes(unittest.TestCase):
         self.assertEqual(Empty.type.as_signature(source_module), "Container a")
         self.assertEqual(Single.type.as_signature(source_module), "a -> Container a")
 
+    def test_function_signature_type_parameters(self):
+        param = types.TypeParam("a")
+        f = types.Function(param, param)
+        self.assertEqual(f.as_signature(codegen.Module()), "a -> a")
+
+        f2 = types.Function(param, dtypes.List.specialize(a=param))
+        self.assertEqual(f2.as_signature(codegen.Module()), "a -> List a")
+
+    def test_tuple_signature(self):
+        module = codegen.Module(name="MyModule")
+        t = types.Tuple(dtypes.String, dtypes.Number)
+        self.assertEqual(t.as_signature(module), "(String, number)")
+
     # This, or something like it, would require a better type system
     #
     # def test_type_parameters_function_application(self):

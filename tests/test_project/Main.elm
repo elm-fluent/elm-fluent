@@ -3,12 +3,13 @@ module Main exposing (..)
 import Date
 import Html as H
 import Html.Attributes as A
-import Html.Events exposing (onClick, onInput)
+import Html.Events exposing (onClick, onInput, onWithOptions)
 import Intl.Locale as Locale
 import Intl.Currency
 import Intl.NumberFormat
 import Intl.DateTimeFormat
 import Intl.TimeZone
+import Json.Decode as JD
 import Ftl.Translations.Main as T
 import Ftl.Translations.Other as T2
 import Fluent
@@ -23,6 +24,7 @@ type Msg
     = Increment
     | Decrement
     | NameChange String
+    | Move Movement
 
 
 
@@ -34,7 +36,13 @@ type alias Model =
     , locale : Locale.Locale
     , clickCount : Int
     , name : String
+    , lastMove : Maybe Movement
     }
+
+
+type Movement
+    = Left
+    | Right
 
 
 model : Model
@@ -43,6 +51,7 @@ model =
     , locale = Locale.en
     , clickCount = 0
     , name = ""
+    , lastMove = Nothing
     }
 
 
@@ -64,6 +73,11 @@ update msg model =
         NameChange name ->
             { model
                 | name = name
+            }
+
+        Move movement ->
+            { model
+                | lastMove = Just movement
             }
 
 
@@ -154,10 +168,46 @@ view model =
                         }
                 ]
             , H.h2 [] [ H.text <| T.htmlTestsSectionTitle locale () ]
-            , H.p [] (T.simpleTextHtml locale ())
-            , H.p [] (T.tagsHtml locale ())
-            , H.p [] (T.attributesHtml locale ())
-            , H.p [] (T.argumentHtml locale { username = "Mary" })
-            , H.p [] (T.htmlMessageReferenceHtml locale { username = "Maria" })
-            , H.p [] (T.attributeSubstitutionHtml locale ())
+            , H.p [] (T.simpleTextHtml locale () [])
+            , H.p [] (T.tagsHtml locale () [])
+            , H.p [] (T.attributesHtml locale () [])
+            , H.p [] (T.argumentHtml locale { username = "Mary" } [])
+            , H.p [] (T.htmlMessageReferenceHtml locale { username = "Maria" } [])
+            , H.p [] (T.attributeSubstitutionHtml locale () [])
+            , H.h2 [] [ H.text <| T.htmlAttributesTestSectionTitle locale () ]
+            , H.p [] [ H.text <| T.lastMovement locale () ]
+            , H.p []
+                [ H.text <|
+                    case model.lastMove of
+                        Nothing ->
+                            T.haventMovedYet locale ()
+
+                        Just Left ->
+                            T.youMovedLeft locale ()
+
+                        Just Right ->
+                            T.youMovedRight locale ()
+                ]
+            , H.p []
+                (T.goLeftOrRightHtml locale
+                    ()
+                    [ ( "a"
+                      , [ A.class "direction"
+                        , A.href "#"
+                        ]
+                      )
+                    , ( "a[data-left]", [ onClickSimply (Move Left) ] )
+                    , ( "a[data-right]", [ onClickSimply (Move Right) ] )
+                    ]
+                )
             ]
+
+
+onClickSimply : msg -> H.Attribute msg
+onClickSimply msg =
+    onWithOptions
+        "click"
+        { stopPropagation = False
+        , preventDefault = True
+        }
+        (JD.succeed msg)

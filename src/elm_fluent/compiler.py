@@ -5,7 +5,6 @@ from collections import OrderedDict
 
 import attr
 import six
-
 from fluent.syntax import FluentParser, ast
 
 from . import codegen, exceptions, html_compiler, types
@@ -37,7 +36,8 @@ PDI = "\u2069"
 # Choose names with final underscores to avoid clashes with message IDs
 MESSAGE_ARGS_NAME = "args_"
 LOCALE_ARG_NAME = "locale_"
-MESSAGE_FUNCTION_ARGS = [LOCALE_ARG_NAME, MESSAGE_ARGS_NAME]
+ATTRS_ARG_NAME = "attrs_"
+ALL_MESSAGE_FUNCTION_ARGS = [LOCALE_ARG_NAME, MESSAGE_ARGS_NAME, ATTRS_ARG_NAME]
 
 
 PLURAL_FORM_FOR_NUMBER_NAME = "plural_form_for_number"
@@ -64,6 +64,7 @@ class CompilerEnvironment(object):
     message_ids_to_ast = attr.ib(factory=dict)
     term_ids_to_ast = attr.ib(factory=dict)
     message_source = attr.ib(default=None)
+    dynamic_html_attributes = attr.ib(default=True)
     current = attr.ib(factory=CurrentEnvironment)
 
     def add_current_message_error(self, error, expr):
@@ -101,7 +102,12 @@ def parse_ftl(source):
 
 
 def compile_messages(
-    messages_string, locale, message_source=None, module_name=None, use_isolating=True
+    messages_string,
+    locale,
+    message_source=None,
+    module_name=None,
+    use_isolating=True,
+    dynamic_html_attributes=True,
 ):
     """
     Compile messages_string to Elm code.
@@ -115,10 +121,9 @@ def compile_messages(
     The error list is itself a list of two tuples:
        (message id, exception object)
     """
-    """
-    Compile a set of messages to a Python module, returning a tuple:
-    (Python source code as a string, dictionary mapping message IDs to Python functions)
-    """
+    # dynamic_html_attributes exists as an option to this function only to
+    # simplify the output in tests/test_compiler when we are not interested in
+    # this feature, otherwise it is just too noisy.
     messages, junk = parse_ftl(messages_string)
     message_ids_to_ast = OrderedDict(get_message_function_ast(messages))
     term_ids_to_ast = OrderedDict(get_term_ast(messages))
@@ -130,6 +135,7 @@ def compile_messages(
         message_ids_to_ast=message_ids_to_ast,
         term_ids_to_ast=term_ids_to_ast,
         message_source=message_source,
+        dynamic_html_attributes=dynamic_html_attributes,
     )
     module_imports = [
         (intl_locale.module, "Locale"),
@@ -148,7 +154,7 @@ def compile_messages(
     # Reserve names for function arguments, so that we always
     # know the name of these arguments without needing to do
     # lookups etc.
-    for arg in list(MESSAGE_FUNCTION_ARGS):
+    for arg in list(ALL_MESSAGE_FUNCTION_ARGS):
         module.reserve_function_arg_name(arg)
 
     # Handle junk
@@ -166,9 +172,7 @@ def compile_messages(
     for msg_id, msg in message_ids_to_ast.items():
         # TODO - Html type messages need an extra parameter for passing
         # attributes.
-        function_type = types.Function.for_multiple_inputs(
-            [intl_locale.Locale, types.Record()], output_type_for_message_id(msg_id)
-        )
+        function_type = function_type_for_message_id(msg_id)
         function_name = module.reserve_name(
             message_function_name_for_msg_id(msg_id), type=function_type
         )
@@ -236,7 +240,9 @@ def compile_messages(
                     exceptions.BadMessageId(error_msg), msg
                 )
                 function = codegen.Function(
-                    parent_scope=module, name=function_name, args=MESSAGE_FUNCTION_ARGS
+                    parent_scope=module,
+                    name=function_name,
+                    args=function_args_for_func_name(function_name),
                 )
                 function.body.value = codegen.CompilationError(dtypes.String)
             else:
@@ -281,17 +287,16 @@ def compile_master(module_name, locales, locale_modules, options):
     )
 
     for func_name in all_sub_module_exports:
-        function_type = types.Function.for_multiple_inputs(
-            [intl_locale.Locale, types.Record()],
-            output_type_for_message_func_name(func_name),
-        )
+        function_type = function_type_for_func_name(func_name)
         function_name = module.reserve_name(func_name, type=function_type)
         assert function_name == func_name, "{0} != {1} unexpectedly".format(
             function_name, func_name
         )
 
         function = codegen.Function(
-            parent_scope=module, name=function_name, args=MESSAGE_FUNCTION_ARGS
+            parent_scope=module,
+            name=function_name,
+            args=function_args_for_func_name(function_name),
         )
         locale_tag_expr = function.variables["Locale.toLanguageTag"].apply(
             function.variables[LOCALE_ARG_NAME]
@@ -304,7 +309,9 @@ def compile_master(module_name, locales, locale_modules, options):
         def do_call(l):
             return function.variables[
                 "{0}.{1}".format(locale_module_local_names[l], func_name)
-            ].apply(*[function.variables[a] for a in MESSAGE_FUNCTION_ARGS])
+            ].apply(
+                *[function.variables[a] for a in function_args_for_func_name(func_name)]
+            )
 
         for locale in locales:
             # TODO - different strategies for handling missing message functions
@@ -343,17 +350,37 @@ def is_html_message_func_name(func_name):
     return func_name.endswith("Html")
 
 
-def output_type_for_message_id(message_id):
-    return output_type_for_message_func_name(
-        message_function_name_for_msg_id(message_id)
-    )
+def function_type_for_message_id(message_id):
+    return function_type_for_func_name(message_function_name_for_msg_id(message_id))
 
 
-def output_type_for_message_func_name(func_name):
-    if func_name.endswith("Html"):
-        return html_compiler.html_output_type
+def function_args_for_func_name(func_name):
+    if is_html_message_func_name(func_name):
+        return [LOCALE_ARG_NAME, MESSAGE_ARGS_NAME, ATTRS_ARG_NAME]
     else:
-        return dtypes.String
+        return [LOCALE_ARG_NAME, MESSAGE_ARGS_NAME]
+
+
+def function_type_for_func_name(func_name):
+    if is_html_message_func_name(func_name):
+        msg = types.TypeParam("msg")
+        return types.Function.for_multiple_inputs(
+            [
+                intl_locale.Locale,
+                types.Record(),
+                dtypes.List.specialize(
+                    a=types.Tuple(
+                        dtypes.String,
+                        dtypes.List.specialize(a=html.Attribute.specialize(msg=msg)),
+                    )
+                ),
+            ],
+            dtypes.List.specialize(a=html.Html.specialize(msg=msg)),
+        )
+    else:
+        return types.Function.for_multiple_inputs(
+            [intl_locale.Locale, types.Record()], dtypes.String
+        )
 
 
 def get_message_function_ast(message_dict):
@@ -411,7 +438,9 @@ def message_function_name_for_msg_id(msg_id):
 
 def compile_message(msg, msg_id, function_name, module, compiler_env):
     msg_func = codegen.Function(
-        parent_scope=module, name=function_name, args=MESSAGE_FUNCTION_ARGS
+        parent_scope=module,
+        name=function_name,
+        args=function_args_for_func_name(function_name),
     )
 
     if contains_reference_cycle(msg, msg_id, compiler_env):
@@ -694,7 +723,10 @@ def do_message_call(name, local_scope, expr, compiler_env):
                 return codegen.CompilationError(dtypes.String)
 
         return local_scope.variables[msg_func_name].apply(
-            *[local_scope.variables[a] for a in MESSAGE_FUNCTION_ARGS]
+            *[
+                local_scope.variables[a]
+                for a in function_args_for_func_name(msg_func_name)
+            ]
         )
     else:
         return unknown_reference(name, local_scope, expr, compiler_env)

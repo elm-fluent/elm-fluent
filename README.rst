@@ -51,9 +51,9 @@ Main TODO items
 * DONE: Complete compiler for Fluent 0.6 syntax
 * DONE: NUMBER and DATETIME builtin functions (using `elm-intl <https://github.com/vanwagonet/elm-intl>`_,
   which means you need `elm-github-install <https://github.com/gdotdesign/elm-github-install/>`_ to install at the moment.
+* DONE: Mechanism for HTML messages, with attaching of event handlers or other arbitrary Attributes to nodes
 * TODO: Good error handling for all errors in FTL files
-* TODO: Mechanism for HTML messages (designed in my head, not implemented)
-
+* TODO: Docs!!!
 
 Credits
 -------

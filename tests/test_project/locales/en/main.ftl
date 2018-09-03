@@ -56,3 +56,15 @@ html-message-reference-html = { argument-html } You came back
 
 attribute-substitution-html = <b foo="{ attribute-substitution-html.foo }">Some text</b>
                             .foo = Hello
+
+html-attributes-test-section-title = HTML attributes
+
+last-movement = Your last movement:
+
+havent-moved-yet = You haven't moved yet
+
+you-moved-left = You moved left
+
+you-moved-right = You moved right
+
+go-left-or-right-html = Go <a data-left>left</a> or <a data-right>right</a>

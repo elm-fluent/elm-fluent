@@ -100,3 +100,22 @@ class TestEndToEnd(unittest.TestCase):
         self.assertIn("Hello <b>Mary</b>!", page_source)
         self.assertIn("Hello <b>Maria</b>! You came back", page_source)
         self.assertIn('<b foo="Hello">Some text</b>', page_source)
+
+        # Dynamic HTML:
+        self.assertIn("You haven't moved yet", page_source)
+        self.assertIn(
+            '<a data-left="" class="direction" href="#">left</a>', page_source
+        )
+        self.assertIn(
+            '<a data-right="" class="direction" href="#">right</a>', page_source
+        )
+
+        e = self.browser.find_element_by_css_selector("a[data-left]")
+        e.click()
+        page_source = self.browser.page_source
+        self.assertIn("You moved left", page_source)
+
+        e = self.browser.find_element_by_css_selector("a[data-right]")
+        e.click()
+        page_source = self.browser.page_source
+        self.assertIn("You moved right", page_source)
