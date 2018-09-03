@@ -170,8 +170,6 @@ def compile_messages(
     # Pass one, find all the names, so that we can populate message_mapping,
     # which is needed for compilation.
     for msg_id, msg in message_ids_to_ast.items():
-        # TODO - Html type messages need an extra parameter for passing
-        # attributes.
         function_type = function_type_for_message_id(msg_id)
         function_name = module.reserve_name(
             message_function_name_for_msg_id(msg_id), type=function_type
@@ -903,7 +901,6 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
 
 @compile_expr.register(ast.VariantName)
 def compile_expr_variant_name(name, local_scope, compiler_env):
-    # TODO - handle numeric literals here?
     return codegen.String(name.name)
 
 

@@ -73,8 +73,6 @@ class TestTypes(unittest.TestCase):
         self.assertEqual(two_applied.as_signature(codegen.Module()), "Bool")
         self.assertEqual(two_applied, dtypes.Bool)
 
-        # TODO explicit test to check apply_args does type constraining
-
     def test_unconstrained_signature(self):
         u = types.UnconstrainedType()
         self.assertEqual(u.as_signature(codegen.Module()), "a")

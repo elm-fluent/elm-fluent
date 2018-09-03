@@ -1389,7 +1389,7 @@ class TestHtml(unittest.TestCase):
             self.locale,
             dynamic_html_attributes=False,
         )
-        # TODO - it would be nice to merge adjacent 'Html.text' calls here
+        # TODO SOMEDAY - it would be nice to merge adjacent 'Html.text' calls here
         self.assertCodeEqual(
             code,
             """
@@ -1428,5 +1428,3 @@ class TestHtml(unittest.TestCase):
 
     # TODO - check all CompilationError usages that assume String return type,
     # adjust for Html return types
-
-    # TODO term inlining

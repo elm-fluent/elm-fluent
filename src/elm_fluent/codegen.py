@@ -261,7 +261,7 @@ class Module(Scope):
         return super(Module, self).all_reserved_names() | ELM_KEYWORDS
 
     def get_imported_module(self, import_name):
-        # Here to avoid circular imports. TODO - more generic mechanism for
+        # Here to avoid circular imports. TODO CLEANUP - more generic mechanism for
         # default imports, while still avoid circular import problem.
         if import_name == "String":
             from .stubs.string import module as string_module
@@ -596,7 +596,7 @@ class Let(Expression, Scope):
            x = value
 
         """
-        # TODO if needed - assignment from tuples
+        # If needed, we might have to add assignment from tuples here
         assigned_name = self.reserve_name(name, type=value.type)
         self.assignments.append(_Assignment(assigned_name, value))
         return self.variables[name]

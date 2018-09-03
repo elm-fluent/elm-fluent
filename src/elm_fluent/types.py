@@ -126,10 +126,6 @@ class TypeParam(UnconstrainedType):
         return isinstance(other, TypeParam)
 
 
-# TODO - need to support type parameters, otherwise 'Maybe Int' is considered
-# equal to as 'Maybe String' etc. However we don't have a need for that yet.
-
-
 class Type(ElmType):
     def __init__(
         self, full_name, module, params=None, constructors=None, reserve_names=True

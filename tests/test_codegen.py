@@ -178,7 +178,7 @@ class TestCodeGen(unittest.TestCase):
         y = let.add_assignment("y", codegen.Number(2))
         let.value = codegen.Add(x, y)
         func = codegen.simplify(func)
-        # TODO - remove unnecessary parenthesis in final expression
+        # TODO SOMEDAY - remove unnecessary parenthesis in final expression
         self.assertCodeEqual(
             func.as_source_code(),
             """
