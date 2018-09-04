@@ -22,4 +22,4 @@ install:
  - npm install -g elm@0.18 elm-test@0.18 elm-github-install
 
 # Command to run tests, e.g. python setup.py test
-script: tox
+script: TOX_TESTENV_PASSENV=HOME tox
