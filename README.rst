@@ -4,7 +4,7 @@ elm-fluent
 
 
 .. image:: https://img.shields.io/pypi/v/elm_fluent.svg
-        :target: https://pypi.python.org/pypi/elm_fluent
+        :target: https://pypi.org/project/elm-fluent/
 
 .. image:: https://img.shields.io/travis/elm-fluent/elm-fluent.svg
         :target: https://travis-ci.org/elm-fluent/elm-fluent
