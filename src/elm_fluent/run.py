@@ -8,6 +8,11 @@ import language_tags
 
 from .compiler import compile_master, compile_messages, module_name_for_locale
 
+try:
+    FileNotFoundError
+except NameError:
+    FileNotFoundError = IOError
+
 
 class MissingTranslationStrategy(object):
     def missing_ftl_file(self, filename, locale, errors, warnings):

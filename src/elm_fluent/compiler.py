@@ -7,8 +7,8 @@ import attr
 import six
 from fluent.syntax import FluentParser, ast
 
-from . import codegen, exceptions, html_compiler, types
-from .stubs import (
+from elm_fluent import codegen, exceptions, html_compiler, types
+from elm_fluent.stubs import (
     defaults as dtypes,
     fluent,
     html,
@@ -18,7 +18,7 @@ from .stubs import (
     intl_numberformat,
     intl_pluralrules,
 )
-from .stubs.defaults import default_imports
+from elm_fluent.stubs.defaults import default_imports
 
 try:
     from functools import singledispatch

@@ -1,16 +1,19 @@
 """
 HTML specific compilation functions
 """
+from __future__ import absolute_import, unicode_literals
+
 import re
 
 import bs4
 import six
 from fluent.syntax import ast
 
-from . import codegen
-from .stubs import defaults as dtypes, html, html_attributes
+from elm_fluent import codegen
+from elm_fluent.stubs import defaults as dtypes, html, html_attributes
 
 text_type = six.text_type
+string_types = six.string_types
 
 html_output_type = dtypes.List.specialize(a=html.Html)
 
@@ -30,18 +33,19 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
     # We have to structure this as a list of lists, then do a List.concat
     # at the end. In many cases the List.concat will disappear after
     # simplify.
+    from elm_fluent import compiler
 
     items = []
     for node in nodes:
         if isinstance(node, bs4.element.NavigableString):
             parts = interpolate_replacements(text_type(node), expr_replacements)
             for part in parts:
-                if isinstance(part, text_type):
+                if isinstance(part, string_types):
                     items.append(
                         codegen.List(
                             [
                                 local_scope.variables["Html.text"].apply(
-                                    codegen.String(part)
+                                    codegen.String(text_type(part))
                                 )
                             ]
                         )
@@ -85,8 +89,8 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
                 )
                 attr_output_parts = []
                 for part in attr_value_parts:
-                    if isinstance(part, text_type):
-                        attr_output_parts.append(codegen.String(part))
+                    if isinstance(part, string_types):
+                        attr_output_parts.append(codegen.String(text_type(part)))
                     else:
                         with compiler_env.modified(html_context=False):
                             attr_output_parts.append(
@@ -202,6 +206,3 @@ def get_selectors_for_node(node):
         attr_value_selector = '[{0}="{1}"]'.format(attr_name, attr_value)
         yield attr_value_selector
         yield tag_name + attr_value_selector
-
-
-from . import compiler  # flake8: noqa  isort:skip

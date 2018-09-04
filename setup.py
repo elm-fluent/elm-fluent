@@ -3,6 +3,8 @@
 
 """The setup script."""
 
+import sys
+
 from setuptools import find_packages, setup
 
 with open("README.rst") as readme_file:
@@ -16,9 +18,13 @@ requirements = [
     "fluent>=0.8.0",
     "attrs>=18",
     "language-tags>=0.4.4",
-    "beautifulsoup>=4.6.3",
+    "beautifulsoup4>=4.6.3",
     "lxml>=4.2.4",
 ]
+
+if sys.version_info < (3, 4):
+    # functools.singledispatch is in stdlib from Python 3.4 onwards.
+    requirements.append("singledispatch>=3.4")
 
 setup_requirements = []
 

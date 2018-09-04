@@ -9,7 +9,7 @@ from functools import wraps
 
 import six
 
-from . import exceptions, types
+from elm_fluent import exceptions, types
 
 # This module provides simple utilities for building up Elm source code. It
 # implements only what is really needed by compiler.py, with a number of aims
@@ -616,8 +616,7 @@ class Let(Expression, Scope):
         return self
 
     def sub_expressions(self):
-        yield from self.assignments
-        yield self.value
+        return self.assignments + [self.value]
 
     def build_source(self, builder):
         with builder.aligned_block():
@@ -995,8 +994,7 @@ class FunctionCall(Expression):
                 arg.build_source(builder)
 
     def sub_expressions(self):
-        yield self.expr
-        yield from self.args
+        return [self.expr] + list(self.args)
 
     def simplify(self, changes):
         self.args = [arg.simplify(changes) for arg in self.args]
@@ -1135,14 +1133,11 @@ def simplify(source_code):
 def traverse(node):
     sub_parts = node.sub_expressions()
     for part in sub_parts:
-        yield from traverse(part)
+        for t in traverse(part):
+            yield t
     yield node
 
 
 def finalize(source_code):
     for node in traverse(source_code):
         node.finalize()
-
-
-# Must be at bottom due to cyclic import
-from .stubs import defaults as dtypes  # flake8: noqa  isort:skip

@@ -6,7 +6,7 @@ from functools import wraps
 import attr
 import six
 
-from . import exceptions
+from elm_fluent import exceptions
 
 # This module is the heart of the type tracking the compiler does. Types are
 # associated with node objects in the codegen.py. It is currently rather adhoc
@@ -254,9 +254,16 @@ class Tuple(Type):
         type_params = [
             TypeParam(six.unichr(ord("a") + i)) for i in range(len(param_types))
         ]
-        super(Tuple, self).__init__("Tuple", None, params=type_params)
+        super(Tuple, self).__init__(
+            "Tuple", None, params=type_params, reserve_names=False
+        )
         for type_param, param_type in zip(type_params, param_types):
             self.param_dict[type_param.preferred_name] = param_type
+
+    def clone(self):
+        retval = self.__class__(self.name)
+        retval.param_dict.update(self.param_dict)
+        return retval
 
     @with_auto_env
     def as_signature(self, from_module, env=None):

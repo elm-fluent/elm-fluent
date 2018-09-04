@@ -3,7 +3,7 @@ Types for Elm defaults
 """
 from __future__ import absolute_import, unicode_literals
 
-from .. import codegen, types
+from elm_fluent import codegen, types
 
 # Default imports: see http://package.elm-lang.org/packages/elm-lang/core/latest
 # or https://github.com/elm-lang/core/blob/5.1.1/src/Basics.elm
