@@ -40,4 +40,4 @@ install:
   - pip install -U tox-travis
   - npm install -g elm@0.18 elm-test@0.18 elm-github-install
 
-script: PATH=$PATH:$PWD/geckodriver TOX_TESTENV_PASSENV=HOME tox
+script: PATH=$PATH:$PWD/geckodriver tox
