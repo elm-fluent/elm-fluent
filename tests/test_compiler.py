@@ -3,8 +3,6 @@ from __future__ import absolute_import, unicode_literals
 
 import unittest
 
-import babel
-
 from elm_fluent import exceptions
 from elm_fluent.compiler import compile_messages, message_function_name_for_msg_id
 
@@ -37,7 +35,7 @@ def compile_messages_to_elm(
 
 
 class TestCompiler(unittest.TestCase):
-    locale = babel.Locale.parse("en_US")
+    locale = "en-US"
 
     maxDiff = None
 
@@ -1058,7 +1056,7 @@ class TestCompiler(unittest.TestCase):
 
 
 class TestHtml(unittest.TestCase):
-    locale = babel.Locale.parse("en_US")
+    locale = "en-US"
 
     maxDiff = None
 
