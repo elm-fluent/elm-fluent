@@ -11,15 +11,31 @@ python:
   - 3.4
   - 2.7
 
-# Command to install dependencies, e.g. pip install -r requirements.txt --use-mirrors
-before_install:
-  - wget https://github.com/mozilla/geckodriver/releases/download/v0.21.0/geckodriver-v0.21.0-linux64.tar.gz
-  - mkdir geckodriver
-  - tar -xzf geckodriver-v0.21.0-linux64.tar.gz -C geckodriver
-  - export PATH=$PATH:$PWD/geckodriver
+cache:
+  directories:
+    - sysconfcpus
+    - geckodriver
+
 install:
+  - |
+    if [ ! -d geckodriver ];
+    then
+      wget https://github.com/mozilla/geckodriver/releases/download/v0.21.0/geckodriver-v0.21.0-linux64.tar.gz;
+      mkdir geckodriver;
+      tar -xzf geckodriver-v0.21.0-linux64.tar.gz -C geckodriver;
+    fi
+  - export PATH=$PATH:$PWD/geckodriver
+
+  - |
+    if [ ! -d sysconfcpus/bin ];
+    then
+      git clone https://github.com/obmarg/libsysconfcpus.git;
+      cd libsysconfcpus;
+      ./configure --prefix=$TRAVIS_BUILD_DIR/sysconfcpus;
+      make && make install;
+      cd ..;
+    fi
  - pip install -U tox-travis
  - npm install -g elm@0.18 elm-test@0.18 elm-github-install
 
-# Command to run tests, e.g. python setup.py test
 script: TOX_TESTENV_PASSENV=HOME tox

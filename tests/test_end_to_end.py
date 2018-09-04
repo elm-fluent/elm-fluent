@@ -55,7 +55,17 @@ class TestEndToEnd(unittest.TestCase):
         )
 
         subprocess.check_call(["elm-install"])
-        subprocess.check_call(["elm-make", "--yes", "Main.elm", "--output=main.js"])
+        elm_make_cmd = ["elm-make", "--yes", "Main.elm", "--output=main.js"]
+        if "TRAVIS_BUILD_DIR" in os.environ:
+            # See https://github.com/elm/compiler/issues/1473#issuecomment-245704142
+            elm_make_cmd = [
+                os.path.join(
+                    os.environ["TRAVIS_BUILD_DIR"], "sysconfcpus", "bin", "sysconfcpus"
+                ),
+                "-n",
+                "2",
+            ] + elm_make_cmd
+        subprocess.check_call(elm_make_cmd)
         self.browser.get("file://{0}/main.html".format(TEST_PROJECT))
         page_source = self.browser.page_source
 
