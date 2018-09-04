@@ -19,7 +19,7 @@ TEST_PROJECT = os.path.join(THIS_DIR, "test_project")
 
 
 def noisy_check_call(cmd):
-    sys.stdout.write(" ".join(cmd) + "\n")
+    sys.stdout.write("\n" + " ".join(cmd) + "\n")
     subprocess.check_call(cmd)
 
 
