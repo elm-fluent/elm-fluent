@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import, unicode_literals
 
 import unittest
@@ -55,7 +56,7 @@ class TestCompiler(unittest.TestCase):
     def test_single_string_literal(self):
         code, errs = compile_messages_to_elm(
             """
-            foo = Foo
+            foo = Foo ☺
         """,
             self.locale,
         )
@@ -64,7 +65,7 @@ class TestCompiler(unittest.TestCase):
             """
             foo : Locale.Locale -> a -> String
             foo locale_ args_ =
-                "Foo"
+                "Foo ☺"
         """,
         )
         self.assertEqual(errs, [])
@@ -1067,7 +1068,7 @@ class TestHtml(unittest.TestCase):
     def test_text(self):
         code, errs = compile_messages_to_elm(
             """
-            text-html = Me &amp; my friends
+            text-html = Me &amp; my friends ☺
             """,
             self.locale,
         )
@@ -1076,7 +1077,7 @@ class TestHtml(unittest.TestCase):
             """
             textHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
             textHtml locale_ args_ attrs_ =
-                [ Html.text "Me & my friends"
+                [ Html.text "Me & my friends ☺"
                 ]
             """,
         )
@@ -1085,7 +1086,7 @@ class TestHtml(unittest.TestCase):
     def test_tags(self):
         code, errs = compile_messages_to_elm(
             """
-            tags-html = Some <b>bold text</b> and some <b>bold and <i>nested italic</i></b> text
+            tags-html = Some <b>bold text</b> and some <b>bold and <i>nested italic ☺</i></b> text
             """,
             self.locale,
             dynamic_html_attributes=False,
@@ -1100,7 +1101,7 @@ class TestHtml(unittest.TestCase):
                             ]
                 , Html.text " and some "
                 , Html.b [] [ Html.text "bold and "
-                            , Html.i [] [ Html.text "nested italic"
+                            , Html.i [] [ Html.text "nested italic ☺"
                                         ]
                             ]
                 , Html.text " text"
