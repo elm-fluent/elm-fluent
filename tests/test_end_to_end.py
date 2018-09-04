@@ -4,6 +4,7 @@ from __future__ import absolute_import, unicode_literals
 
 import os
 import subprocess
+import sys
 import time
 import unittest
 
@@ -15,6 +16,11 @@ from elm_fluent import cli
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 TEST_PROJECT = os.path.join(THIS_DIR, "test_project")
+
+
+def noisy_check_call(cmd):
+    sys.stdout.write(" ".join(cmd) + "\n")
+    subprocess.check_call(cmd)
 
 
 @unittest.skipIf(os.environ.get("TEST_FAST_RUN", "0") == "1", "Skipping slow tests")
@@ -50,11 +56,9 @@ class TestEndToEnd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
 
         # Check the script in installed as expected
-        subprocess.check_call(
-            ["ftl2elm", "--when-missing=fallback", "--no-bdi-isolating"]
-        )
+        noisy_check_call(["ftl2elm", "--when-missing=fallback", "--no-bdi-isolating"])
 
-        subprocess.check_call(["elm-install"])
+        noisy_check_call(["elm-install"])
         elm_make_cmd = ["elm-make", "--yes", "Main.elm", "--output=main.js"]
         if "TRAVIS_BUILD_DIR" in os.environ:
             # See https://github.com/elm/compiler/issues/1473#issuecomment-245704142
@@ -65,7 +69,8 @@ class TestEndToEnd(unittest.TestCase):
                 "-n",
                 "2",
             ] + elm_make_cmd
-        subprocess.check_call(elm_make_cmd)
+
+        noisy_check_call(elm_make_cmd)
         self.browser.get("file://{0}/main.html".format(TEST_PROJECT))
         page_source = self.browser.page_source
 
