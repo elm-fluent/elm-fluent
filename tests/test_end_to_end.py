@@ -112,10 +112,12 @@ class TestEndToEnd(unittest.TestCase):
 
         e = self.browser.find_element_by_css_selector("a[data-left]")
         e.click()
+        time.sleep(0.1)
         page_source = self.browser.page_source
         self.assertIn("You moved left", page_source)
 
         e = self.browser.find_element_by_css_selector("a[data-right]")
         e.click()
+        time.sleep(0.1)
         page_source = self.browser.page_source
         self.assertIn("You moved right", page_source)

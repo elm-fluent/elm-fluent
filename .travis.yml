@@ -1,5 +1,9 @@
 # Config file for automatic testing at travis-ci.org
 
+env:
+  - MOZ_HEADLESS=1
+addons:
+  firefox: latest
 language: python
 python:
   - 3.6
