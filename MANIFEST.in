@@ -8,12 +8,21 @@ include release.sh
 include runtests.py
 include tox.ini
 include requirements_dev.txt
+include *.json
+include *.yaml
 
-recursive-include tests *
+
 recursive-include src *
+recursive-include tests *.py *.elm *.ftl *.html *.json
 recursive-include .github *
+recursive-include elm_src *.elm
+recursive-include docs *.rst conf.py Makefile make.bat *.jpg *.png *.gif
+
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
-
-recursive-include docs *.rst conf.py Makefile make.bat *.jpg *.png *.gif
 recursive-exclude * *~
+
+prune src/elm-stuff
+prune tests/test_project/elm-stuff
+prune tests/test_project/Ftl
+prune docs/_build

@@ -273,8 +273,6 @@ class Module(Scope):
         """
         For a given module, find the qualifer that must be used for that module in this module
         """
-        from .stubs.defaults import default_imports
-
         if module is self:
             return ""
 
