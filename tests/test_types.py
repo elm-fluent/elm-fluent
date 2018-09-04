@@ -51,6 +51,9 @@ class TestTypes(unittest.TestCase):
             class Expr(codegen.Expression):
                 type = type_obj
 
+                def constrain_type(self, type_obj):
+                    self.type = type_obj
+
             return Expr()
 
         function = types.Function.for_multiple_inputs(

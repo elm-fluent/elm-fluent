@@ -892,7 +892,7 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
 
             # TODO - test for what happens here when there is TypeMismatch
             # e.g. there is a numeric
-            key_value.type = case_selector_value.type.constrain(key_value.type)
+            key_value.constrain_type(case_selector_value.type.constrain(key_value.type))
             branch = case_expr.add_branch(key_value)
             branch.value = compile_expr(variant.value, branch, compiler_env)
 
@@ -1013,8 +1013,8 @@ class Stringable(codegen.Expression):
     def type(self):
         return dtypes.String
 
-    @type.setter
-    def type(self, type_obj):
+    @codegen.handle_type_constaining
+    def constrain_type(self, type_obj):
         self._assigned_types.append(type_obj)
 
     def sub_expressions(self):
