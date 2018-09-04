@@ -93,11 +93,11 @@ and dependency sources - this will be a new section if you haven't used
 
     "dependency-sources": {
         "thetalecrafter/elm-intl": {
-            "url": "git@github.com:elm-fluent/elm-intl",
+            "url": "https://github.com/elm-fluent/elm-intl",
             "ref": "master"
         },
         "elm-fluent/elm-fluent": {
-            "url": "git@github.com:elm-fluent/elm-fluent",
+            "url": "https://github.com/elm-fluent/elm-fluent",
             "ref": "master"
         }
     },

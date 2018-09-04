@@ -14,7 +14,7 @@
     },
     "dependency-sources": {
         "thetalecrafter/elm-intl": {
-            "url": "git@github.com:elm-fluent/elm-intl",
+            "url": "https://github.com/elm-fluent/elm-intl",
             "ref": "master"
         }
     },
