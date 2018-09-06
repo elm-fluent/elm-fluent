@@ -17,9 +17,9 @@ files.
    files from which translation is done for the other (‘destination’) languages.
 
    That approach has some advantages, but major disadvantages when it comes to
-   Fluent. Fluent is a language in its own right, that puts (just enough) power
-   into the hands of translators to produce good translations, while maintaining
-   proper separation of concerns.
+   `Fluent <https://projectfluent.org/>`_. Fluent is a language in its own
+   right, that puts (just enough) power into the hands of translators to produce
+   good translations, while maintaining proper separation of concerns.
 
    For Fluent, developers need to put localized text into ``.ftl`` files, so the full
    power of that language will be used. This includes:
@@ -42,9 +42,10 @@ something like this:
    notifications-intro = Hello { $username }, you have unread notifications
 
 
-You compile this to Elm files using ``ftl2elm``. (Normally the generated
-``.elm`` files should not be stored in your VCS, you store only the ``.ftl``
-files). You can then use the generated functions from your Elm source code.
+You compile this to Elm files using ``ftl2elm``. Normally the generated ``.elm``
+files, which appear under ``Ftl`` by default, should not be stored in your VCS,
+you store only the ``.ftl`` files. You can then use these generated functions
+from your Elm source code.
 
 Your app first needs some way to determine the user's current locale. This is
 usually best done by allowing them to choose from a list, and then saving this
@@ -62,9 +63,10 @@ Then our Elm source code might look like this:
                  ]
 
 The generated functions (in this case ``notificationsTitle`` and
-``notificationsIntro``) all have the same signature - they take a locale value
-and a strongly typed record of substitution parameters, and return a string (or
-``Html`` for advanced use cases).
+``notificationsIntro``) all follow the same pattern in terms of signature - they
+take a locale value and a strongly typed record of substitution parameters, and
+return a string. (For advanced use cases, the functions return ``Html`` and take
+an additional parameter that allows attributes to be added to the HTML).
 
 .. admonition:: Justifcation
 
@@ -79,8 +81,8 @@ function for the correct language (we just have one so far).
 You now need to distribute your ``.ftl`` files and get translations for the
 other languages you support. These are saved into the correct sub folder in your
 locales directory and committed to VCS. (Mozilla has developed the `Pontoon
-<https://github.com/mozilla/pontoon>`_ system to help with this part, but
-elm-fluent doesn't have good integration with it yet).
+<https://github.com/mozilla/pontoon>`_ system which provides a GUI for editing
+``.ftl`` files, but elm-fluent doesn't have good integration with it yet).
 
 Finally, you can now compile the ``.ftl`` for all the languages, compile your
 Elm app and deploy.

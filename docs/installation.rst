@@ -10,7 +10,7 @@ Stable release
 
 elm-fluent works primarily as a command line application that compiles ``.ftl``
 files to Elm code. This application is written in Python, and if you already have
-a Python installation (2.7 or 3.3+) you can easily install it as follows:
+a Python installation (2.7 or 3.4+) you can easily install it as follows:
 
 We recommend making a virtualenv for the installation to isolate it from your
 system Python:
@@ -48,8 +48,8 @@ Elm dependencies
 ----------------
 
 The ``.elm`` files that elm-fluent produces have dependencies. At this point in
-time, these dependencies are a bit problematic: Fluent has `built-in date and
-number formatting functions
+time, these dependencies are a bit problematic: the Fluent spec has `built-in
+date and number formatting functions
 <https://projectfluent.org/fluent/guide/functions.html#built-in-functions>`_
 (``DATETIME`` and ``NUMBER``), as well as support for handling of plural forms,
 which are covered by built-in browser Javascript modules `Intl.DateTimeFormat
