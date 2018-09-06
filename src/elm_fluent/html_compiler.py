@@ -110,7 +110,12 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
 
             if compiler_env.dynamic_html_attributes:
                 selectors_for_node = codegen.List(
-                    list(map(codegen.String, get_selectors_for_node(node)))
+                    list(
+                        map(
+                            codegen.String,
+                            get_selectors_for_node(node, expr_replacements),
+                        )
+                    )
                 )
                 dynamic_attributes = local_scope.variables[
                     "Fluent.selectAttributes"
@@ -179,18 +184,23 @@ def interpolate_replacements(text, expr_replacements):
     return [expr_replacements.get(t, t) for t in split_text]
 
 
-def get_selectors_for_node(node):
+def get_selectors_for_node(node, expr_replacements):
     tag_name = node.name.lower()
     yield tag_name
 
+    def is_static_only(attr_value):
+        parts = interpolate_replacements(attr_value, expr_replacements)
+        return all(isinstance(p, text_type) for p in parts)
+
     classes = node.attrs.get("class", [])
-    for class_ in classes:
-        class_selector = ".{0}".format(class_)
-        yield class_selector
-        yield tag_name + class_selector
+    if is_static_only(" ".join(classes)):
+        for class_ in classes:
+            class_selector = ".{0}".format(class_)
+            yield class_selector
+            yield tag_name + class_selector
 
     id = node.attrs.get("id", None)
-    if id is not None:
+    if id is not None and is_static_only(id):
         id_selector = "#{0}".format(id)
         yield id_selector
         yield tag_name + id_selector
@@ -203,6 +213,7 @@ def get_selectors_for_node(node):
         yield attr_present_selector
         yield tag_name + attr_present_selector
 
-        attr_value_selector = '[{0}="{1}"]'.format(attr_name, attr_value)
-        yield attr_value_selector
-        yield tag_name + attr_value_selector
+        if is_static_only(attr_value):
+            attr_value_selector = '[{0}="{1}"]'.format(attr_name, attr_value)
+            yield attr_value_selector
+            yield tag_name + attr_value_selector

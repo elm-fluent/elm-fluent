@@ -1360,6 +1360,51 @@ class TestHtml(unittest.TestCase):
         )
         self.assertEqual(errs, [])
 
+    def test_attribute_substitution(self):
+        # If we have any non-static text in attributes, we can't use them for attribute selectors
+        code, errs = compile_messages_to_elm(
+            """
+            attributes-html = <b class="foo{ bar }" data-foo="{ $arg }" id="{ baz.id }">text</b>
+            bar = Bar
+            baz = baz
+                .id = bazid
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            attributesHtml : Locale.Locale -> { a | arg : b } -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            attributesHtml locale_ args_ attrs_ =
+                [ Html.b (List.concat [ [ Attributes.class (String.concat [ "foo"
+                                                                          , bar locale_ args_
+                                                                          ])
+                                        , Attributes.attribute "data-foo" args_.arg
+                                        , Attributes.id (baz_id locale_ args_)
+                                        ]
+                                      , Fluent.selectAttributes attrs_ [ "b"
+                                                                       , "[data-foo]"
+                                                                       , "b[data-foo]"
+                                                                       ]
+                                      ]) [ Html.text "text"
+                                         ]
+                ]
+
+            bar : Locale.Locale -> a -> String
+            bar locale_ args_ =
+                "Bar"
+
+            baz : Locale.Locale -> a -> String
+            baz locale_ args_ =
+                "baz"
+
+            baz_id : Locale.Locale -> a -> String
+            baz_id locale_ args_ =
+                "bazid"
+            """,
+        )
+        self.assertEqual(errs, [])
+
     def test_argument(self):
         code, errs = compile_messages_to_elm(
             """
