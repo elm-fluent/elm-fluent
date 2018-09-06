@@ -128,7 +128,7 @@ def generate_elm_for_stem(options, locales, stem):
 
     sources = {}
     locale_modules = {}
-    files_to_write = []
+    modules_to_write = []
     master_message_mapping = {}
     for locale in locales:
         filename = os.path.join(options.locales_dir, locale, stem)
@@ -150,7 +150,7 @@ def generate_elm_for_stem(options, locales, stem):
             if compile_errors:
                 errors.extend(compile_errors)
             else:
-                files_to_write.append((new_elm_path, module.as_source_code()))
+                modules_to_write.append((new_elm_path, module))
         else:
             options.missing_translation_strategy.missing_ftl_file(
                 options, filename, locale, errors, warnings
@@ -179,14 +179,19 @@ def generate_elm_for_stem(options, locales, stem):
 
     if not master_errors:
         master_filename = path_for_module(options, master_module_name)
-        files_to_write.append((master_filename, master_module.as_source_code()))
+        modules_to_write.append((master_filename, master_module))
 
     def finalizer():
         if not errors:
-            for fname, source in files_to_write:
-                ensure_path_dirs(fname)
-                with open(fname, "wb") as f:
-                    f.write(source.encode("utf-8"))
+            for fname, module in modules_to_write:
+                if module.exports:
+                    # If there are no exports, there is no point writing the
+                    # module, and `exposing ()` is also invalid syntax, so we
+                    # must avoid writing it
+                    source = module.as_source_code()
+                    ensure_path_dirs(fname)
+                    with open(fname, "wb") as f:
+                        f.write(source.encode("utf-8"))
 
     def error_printer():
         print_errors(options, errors, sources)

@@ -297,7 +297,8 @@ def compile_master(module_name, locales, locale_modules, message_mapping, option
     }
 
     for locale, locale_module in locale_modules.items():
-        module.add_import(locale_module, locale_module_local_names[locale])
+        if locale_module.exports:
+            module.add_import(locale_module, locale_module_local_names[locale])
 
     sub_module_exports = {
         locale: locale_module.exports
