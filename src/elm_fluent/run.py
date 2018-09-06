@@ -6,7 +6,14 @@ import os.path
 import click
 import language_tags
 
-from .compiler import compile_master, compile_messages, module_name_for_locale
+from . import exceptions
+from .compiler import (
+    compile_master,
+    compile_messages,
+    module_name_for_locale,
+    span_to_position,
+)
+from .stubs import defaults as dtypes
 
 try:
     FileNotFoundError
@@ -15,7 +22,7 @@ except NameError:
 
 
 class MissingTranslationStrategy(object):
-    def missing_ftl_file(self, filename, locale, errors, warnings):
+    def missing_ftl_file(self, options, filename, locale, errors, warnings):
         raise NotImplementedError()
 
     def missing_message(self, message_id, locale, errors, warnings):
@@ -23,15 +30,19 @@ class MissingTranslationStrategy(object):
 
 
 class ErrorWhenMissing(MissingTranslationStrategy):
-    def missing_ftl_file(self, filename, locale, errors, warnings):
-        errors.append(FileNotFoundError("{0} not found".format(filename)))
+    def missing_ftl_file(self, options, filename, locale, errors, warnings):
+        errors.append(
+            FileNotFoundError(
+                "{0} - file not found".format(os.path.relpath(filename, options.cwd))
+            )
+        )
 
 
 class FallbackToDefaultLocaleWhenMissing(MissingTranslationStrategy):
     def __init__(self, fallback_locale):
         self.fallback_locale = fallback_locale
 
-    def missing_ftl_file(self, filename, locale, errors, warnings):
+    def missing_ftl_file(self, options, filename, locale, errors, warnings):
         if locale == self.fallback_locale:
             # Can't fall back to anything if the fallback is missing
             errors.append(FileNotFoundError("{0} not found".format(filename)))
@@ -103,7 +114,7 @@ def generate_elm_for_stem(options, locales, stem, errors=None, warnings=None):
                 files_to_write.append((new_elm_path, module.as_source_code()))
         else:
             options.missing_translation_strategy.missing_ftl_file(
-                filename, locale, errors, warnings
+                options, filename, locale, errors, warnings
             )
 
     master_module_name = module_name_for_stem(stem, master=True)
@@ -122,37 +133,67 @@ def generate_elm_for_stem(options, locales, stem, errors=None, warnings=None):
                 f.write(source.encode("utf-8"))
 
     else:
-        print_errors(errors, sources)
+        print_errors(options, errors, sources)
         raise click.Abort()
 
 
-def span_to_position(span, source_text):
-    start = span.start
-    relevant = source_text[0:start]
-    row = relevant.count("\n") + 1
-    col = len(relevant) - relevant.rfind("\n")
-    return row, col
-
-
-def print_errors(errors, sources):
+def print_errors(options, errors, sources):
     if errors:
         click.secho("Errors found:\n", fg="red", bold=True)
     for err in errors:
-        if hasattr(err, "error_source"):
-            source_filename = err.message_source
-            row, col = span_to_position(err.error_source.span, sources[source_filename])
-            if hasattr(err, "message_id"):
-                click.echo(
-                    "{0}:{1}:{2}: In {3}: {4}".format(
-                        source_filename, row, col, err.message_id, err.args[0]
+        if hasattr(err, "error_sources"):
+            for error_source in err.error_sources:
+                source_filename = error_source.message_source
+                row, col = span_to_position(
+                    error_source.expr.span, sources[source_filename]
+                )
+                short_filename = os.path.relpath(source_filename, options.cwd)
+                if error_source.message_id is not None:
+                    click.echo(
+                        "{0}:{1}:{2}: In message '{3}': {4}".format(
+                            short_filename,
+                            row,
+                            col,
+                            error_source.message_id,
+                            err.args[0],
+                        )
                     )
-                )
-            else:
-                click.echo(
-                    "{0}:{1}:{2}: {3}".format(source_filename, row, col, err.args[0])
-                )
+                else:
+                    click.echo(
+                        "{0}:{1}:{2}: {3}".format(short_filename, row, col, err.args[0])
+                    )
         else:
             click.echo(err.args[0])
+        if isinstance(err, exceptions.RecordTypeMismatch):
+            click.echo(
+                "  Explanation: incompatible types were detected for message argument '${0}'".format(
+                    err.field_name
+                )
+            )
+            type_sources = err.record_type.field_type_ftl_sources[err.field_name]
+            if type_sources:
+                click.echo("  Compare the following:")
+                for type_source in type_sources:
+                    t_source_filename = type_source.ftl_source.message_source
+                    t_short_filename = os.path.relpath(t_source_filename, options.cwd)
+                    row, col = span_to_position(
+                        type_source.ftl_source.expr.span, sources[t_source_filename]
+                    )
+                    click.echo(
+                        "    {0}:{1}:{2}: Inferred type: {3}".format(
+                            t_short_filename, row, col, type_source.type_obj
+                        )
+                    )
+
+                if any(
+                    type_source.type_obj == dtypes.String
+                    for type_source in type_sources
+                ):
+                    click.echo("")
+                    click.echo(
+                        "  Hint: You may need to use NUMBER() or DATETIME() builtins to force the correct type"
+                    )
+        click.echo("")
 
 
 def print_warnings(warnings):

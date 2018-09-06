@@ -3,8 +3,15 @@ from __future__ import absolute_import, unicode_literals
 
 import unittest
 
+from fluent.syntax import ast
+
 from elm_fluent import exceptions
-from elm_fluent.compiler import compile_messages, message_function_name_for_msg_id
+from elm_fluent.compiler import (
+    compile_messages,
+    message_function_name_for_msg_id,
+    span_to_position,
+)
+from elm_fluent.stubs import fluent
 
 from .test_codegen import normalize_elm
 from .utils import dedent_ftl
@@ -332,7 +339,7 @@ class TestCompiler(unittest.TestCase):
         """,
             self.locale,
         )
-        self.assertEqual(errs[0].message_id, "bar")
+        self.assertEqual(errs[0].error_sources[0].message_id, "bar")
         self.assertEqual(errs[0], exceptions.ReferenceError("Unknown message: foo.baz"))
 
     def test_single_message_reference_reversed_order(self):
@@ -367,7 +374,7 @@ class TestCompiler(unittest.TestCase):
         )
         self.assertIn("COMPILATION_ERROR", code)
         self.assertEqual(len(errs), 1)
-        self.assertEqual(errs[0].message_id, "bar")
+        self.assertEqual(errs[0].error_sources[0].message_id, "bar")
         self.assertEqual(errs[0], exceptions.ReferenceError("Unknown message: foo"))
 
     def test_bad_name_keyword(self):
@@ -379,7 +386,7 @@ class TestCompiler(unittest.TestCase):
         )
         self.assertIn("COMPILATION_ERROR", code)
         self.assertEqual(len(errs), 1)
-        self.assertEqual(errs[0].message_id, "type")
+        self.assertEqual(errs[0].error_sources[0].message_id, "type")
         self.assertEqual(
             errs[0],
             exceptions.BadMessageId(
@@ -397,7 +404,7 @@ class TestCompiler(unittest.TestCase):
         )
         self.assertIn("COMPILATION_ERROR", code)
         self.assertEqual(len(errs), 1)
-        self.assertEqual(errs[0].message_id, "max")
+        self.assertEqual(errs[0].error_sources[0].message_id, "max")
         self.assertEqual(
             errs[0],
             exceptions.BadMessageId(
@@ -417,7 +424,7 @@ class TestCompiler(unittest.TestCase):
         )
         self.assertIn("COMPILATION_ERROR", code)
         self.assertEqual(len(errs), 1)
-        self.assertEqual(errs[0].message_id, "aMessageId")
+        self.assertEqual(errs[0].error_sources[0].message_id, "aMessageId")
         self.assertEqual(
             errs[0],
             exceptions.BadMessageId(
@@ -649,7 +656,7 @@ class TestCompiler(unittest.TestCase):
         """,
             self.locale,
         )
-        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(errs[0].error_sources[0].message_id, "foo")
         self.assertEqual(
             errs[0], exceptions.ReferenceError("Unknown function: MISSING")
         )
@@ -662,7 +669,7 @@ class TestCompiler(unittest.TestCase):
             self.locale,
         )
         self.assertEqual(len(errs), 1)
-        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(errs[0].error_sources[0].message_id, "foo")
         self.assertEqual(
             errs[0],
             exceptions.FunctionParameterError(
@@ -678,13 +685,115 @@ class TestCompiler(unittest.TestCase):
             self.locale,
         )
         self.assertEqual(len(errs), 1)
-        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(errs[0].error_sources[0].message_id, "foo")
         self.assertEqual(
             errs[0],
             exceptions.FunctionParameterError(
                 "NUMBER() takes 1 positional argument(s) but 2 were given"
             ),
         )
+        self.assertEqual(type(errs[0].error_sources[0].expr), ast.CallExpression)
+
+    def test_message_arg_type_mismatch(self):
+        # Should return error gracefully
+        src = dedent_ftl(
+            """
+            foo = { NUMBER($arg) } { DATETIME($arg) }
+        """
+        )
+        code, errs = compile_messages_to_elm(src, self.locale)
+        self.assertEqual(len(errs), 1)
+        err = errs[0]
+        self.assertEqual(span_to_position(err.error_sources[0].expr.span, src), (1, 26))
+
+        self.assertEqual(type(err), exceptions.RecordTypeMismatch)
+        self.assertEqual(err.field_name, "arg")
+        type_sources = err.record_type.field_type_ftl_sources["arg"]
+        self.assertEqual(len(type_sources), 2)
+
+        self.assertEqual(
+            span_to_position(type_sources[0].ftl_source.expr.span, src), (1, 9)
+        )
+        self.assertEqual(type_sources[0].type_obj, fluent.FluentNumber)
+
+        self.assertEqual(
+            span_to_position(type_sources[1].ftl_source.expr.span, src), (1, 26)
+        )
+        self.assertEqual(type_sources[1].type_obj, fluent.FluentDate)
+
+    def test_message_arg_type_mismatch_across_messsages(self):
+        # Should return error gracefully, including info about where the
+        # different types were inferred from
+        src = dedent_ftl(
+            """
+            foo = { bar } { baz }
+
+            bar = { NUMBER($arg) }
+
+            baz = { DATETIME($arg) }
+        """
+        )
+        code, errs = compile_messages_to_elm(src, self.locale)
+        self.assertEqual(len(errs), 1)
+        err = errs[0]
+        self.assertEqual(span_to_position(err.error_sources[0].expr.span, src), (1, 17))
+
+        self.assertEqual(type(err), exceptions.RecordTypeMismatch)
+        self.assertEqual(err.field_name, "arg")
+        type_sources = err.record_type.field_type_ftl_sources["arg"]
+        self.assertEqual(len(type_sources), 2)
+        self.assertEqual(
+            span_to_position(type_sources[0].ftl_source.expr.span, src), (3, 9)
+        )
+        self.assertEqual(
+            span_to_position(type_sources[1].ftl_source.expr.span, src), (5, 9)
+        )
+
+    def test_message_arg_type_mismatch_with_args(self):
+        # Should return error gracefully
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { NUMBER($arg, useGrouping:0) } { DATETIME($arg, era:"long") }
+        """,
+            self.locale,
+        )
+        self.assertEqual(len(errs), 1)
+
+    def test_message_arg_type_mismatch_with_string(self):
+        src = dedent_ftl(
+            """
+            foo = { bar } { baz }
+
+            bar = { $arg }
+
+            baz = { NUMBER($arg) }
+        """
+        )
+        code, errs = compile_messages_to_elm(src, self.locale)
+        self.assertEqual(len(errs), 1)
+        err = errs[0]
+        self.assertEqual(span_to_position(err.error_sources[0].expr.span, src), (1, 17))
+
+        self.assertEqual(type(err), exceptions.RecordTypeMismatch)
+        self.assertEqual(err.field_name, "arg")
+        type_sources = err.record_type.field_type_ftl_sources["arg"]
+        self.assertEqual(len(type_sources), 2)
+        self.assertEqual(
+            span_to_position(type_sources[0].ftl_source.expr.span, src), (3, 7)
+        )
+        self.assertEqual(
+            span_to_position(type_sources[1].ftl_source.expr.span, src), (5, 9)
+        )
+
+    def test_function_arg_type_mismatch(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { NUMBER($arg, era: 123) }
+        """,
+            self.locale,
+        )
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(type(errs[0].error_sources[0].expr), ast.CallExpression)
 
     def test_message_with_attrs(self):
         code, errs = compile_messages_to_elm(
@@ -784,7 +893,7 @@ class TestCompiler(unittest.TestCase):
         """,
             self.locale,
         )
-        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(errs[0].error_sources[0].message_id, "foo")
         self.assertEqual(
             errs[0], exceptions.ReferenceError("Unknown variant: -my-term[c]")
         )
@@ -796,7 +905,7 @@ class TestCompiler(unittest.TestCase):
         """,
             self.locale,
         )
-        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(errs[0].error_sources[0].message_id, "foo")
         self.assertEqual(errs[0], exceptions.ReferenceError("Unknown term: -my-term"))
 
     def test_variant_select_from_non_variant(self):
@@ -807,7 +916,7 @@ class TestCompiler(unittest.TestCase):
         """,
             self.locale,
         )
-        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(errs[0].error_sources[0].message_id, "foo")
         self.assertEqual(
             errs[0], exceptions.ReferenceError("Unknown variant: -my-term[a]")
         )
@@ -1015,7 +1124,7 @@ class TestCompiler(unittest.TestCase):
         """,
             self.locale,
         )
-        self.assertEqual(errs[0].message_id, "foo")
+        self.assertEqual(errs[0].error_sources[0].message_id, "foo")
         self.assertEqual(
             errs[0], exceptions.CyclicReferenceError("Cyclic reference in foo")
         )
@@ -1031,11 +1140,11 @@ class TestCompiler(unittest.TestCase):
         """,
             self.locale,
         )
-        self.assertEqual(errs[0].message_id, "foo.attr1")
+        self.assertEqual(errs[0].error_sources[0].message_id, "foo.attr1")
         self.assertEqual(
             errs[0], exceptions.CyclicReferenceError("Cyclic reference in foo.attr1")
         )
-        self.assertEqual(errs[1].message_id, "bar.attr2")
+        self.assertEqual(errs[1].error_sources[0].message_id, "bar.attr2")
         self.assertEqual(
             errs[1], exceptions.CyclicReferenceError("Cyclic reference in bar.attr2")
         )
@@ -1048,7 +1157,7 @@ class TestCompiler(unittest.TestCase):
         """,
             self.locale,
         )
-        self.assertEqual(errs[0].message_id, "cyclic-term-message")
+        self.assertEqual(errs[0].error_sources[0].message_id, "cyclic-term-message")
         self.assertEqual(
             errs[0],
             exceptions.CyclicReferenceError("Cyclic reference in cyclic-term-message"),

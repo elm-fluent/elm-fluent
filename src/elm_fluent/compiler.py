@@ -55,6 +55,13 @@ class CurrentEnvironment(object):
 
 
 @attr.s
+class FtlSource(object):
+    expr = attr.ib()
+    message_source = attr.ib()
+    message_id = attr.ib()
+
+
+@attr.s
 class CompilerEnvironment(object):
     locale = attr.ib()
     use_isolating = attr.ib()
@@ -68,9 +75,13 @@ class CompilerEnvironment(object):
     current = attr.ib(factory=CurrentEnvironment)
 
     def add_current_message_error(self, error, expr):
-        error.message_source = self.message_source
-        error.error_source = expr
-        error.message_id = self.current.message_id
+        error.error_sources.append(
+            FtlSource(
+                expr=expr,
+                message_source=self.message_source,
+                message_id=self.current.message_id,
+            )
+        )
         self.errors.append(error)
 
     @contextlib.contextmanager
@@ -111,6 +122,10 @@ def compile_messages(
 ):
     """
     Compile messages_string to Elm code.
+
+    locale is BCP47 locale (currently unused)
+
+    message_source is a filename that the messages came from
 
     Returns a tuple:
        (elm_source,
@@ -163,8 +178,13 @@ def compile_messages(
             "Junk found: " + "; ".join(a.message for a in junk_item.annotations),
             junk_item.annotations,
         )
-        err.message_source = compiler_env.message_source
-        err.error_source = junk_item
+        err.error_sources.append(
+            FtlSource(
+                expr=junk_item,
+                message_source=compiler_env.message_source,
+                message_id=None,
+            )
+        )
         compiler_env.errors.append(err)
 
     # Pass one, find all the names, so that we can populate message_mapping,
@@ -644,7 +664,11 @@ def compile_expr_pattern(pattern, local_scope, compiler_env):
         if wrap_this_with_isolating:
             parts.append(codegen.String(FSI))
         parts.append(
-            Stringable(compile_expr(element, local_scope, compiler_env), local_scope)
+            Stringable(
+                compile_expr(element, local_scope, compiler_env),
+                local_scope,
+                from_ftl_source=make_ftl_source(element, compiler_env),
+            )
         )
         if wrap_this_with_isolating:
             parts.append(codegen.String(PDI))
@@ -688,7 +712,11 @@ def compile_expr_placeable(placeable, local_scope, compiler_env):
 @compile_expr.register(ast.MessageReference)
 def compile_expr_message_reference(reference, local_scope, compiler_env):
     name = reference.id.name
-    return do_message_call(name, local_scope, reference, compiler_env)
+    try:
+        return do_message_call(name, local_scope, reference, compiler_env)
+    except exceptions.TypeMismatch as e:
+        compiler_env.add_current_message_error(e, reference)
+        return codegen.CompilationError(dtypes.String)
 
 
 @compile_expr.register(ast.TermReference)
@@ -785,22 +813,37 @@ def is_cldr_plural_form_key(key_expr):
 def compile_expr_select_expression(select_expr, local_scope, compiler_env):
     selector_value = compile_expr(select_expr.selector, local_scope, compiler_env)
 
-    any_numerics = any(
-        isinstance(variant.key, ast.NumberLiteral) for variant in select_expr.variants
-    )
-    all_numerics = all(
-        isinstance(variant.key, ast.NumberLiteral) for variant in select_expr.variants
-    )
-    all_plural_forms = all(
-        is_cldr_plural_form_key(variant.key) for variant in select_expr.variants
-    )
+    numeric_variants = [
+        variant
+        for variant in select_expr.variants
+        if isinstance(variant.key, ast.NumberLiteral)
+    ]
+    any_numerics = len(numeric_variants) > 0
+    all_numerics = len(numeric_variants) == len(select_expr.variants)
+
+    plural_form_variants = [
+        variant
+        for variant in select_expr.variants
+        if is_cldr_plural_form_key(variant.key)
+    ]
+    all_plural_forms = len(plural_form_variants) == len(select_expr.variants)
+
+    constraining_ftl_expr = None
 
     if any_numerics:
         numeric_key = True
+        constraining_ftl_expr = numeric_variants[0]
     elif all_plural_forms:
         numeric_key = True
+        constraining_ftl_expr = plural_form_variants[0]
     else:
+        # No numerics, and some of the strings are not plural form categories
         numeric_key = False
+        constraining_ftl_expr = [
+            variant
+            for variant in select_expr.variants
+            if variant not in plural_form_variants
+        ][0]
 
     if numeric_key:
         if isinstance(selector_value, codegen.Number):
@@ -812,7 +855,10 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
 
     # TODO - test for what happens here when there is a type mismatch,
     # possibly wrap in try/catch etc.
-    selector_value.constrain_type(inferred_key_type)
+    selector_value.constrain_type(
+        inferred_key_type,
+        from_ftl_source=make_ftl_source(constraining_ftl_expr, compiler_env),
+    )
 
     def get_plural_form(number_val):
         return local_scope.variables["PluralRules.select"].apply(
@@ -892,7 +938,10 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
 
             # TODO - test for what happens here when there is TypeMismatch
             # e.g. there is a numeric
-            key_value.constrain_type(case_selector_value.type.constrain(key_value.type))
+            key_value.constrain_type(
+                case_selector_value.type.constrain(key_value.type),
+                from_ftl_source=make_ftl_source(variant, compiler_env),
+            )
             branch = case_expr.add_branch(key_value)
             branch.value = compile_expr(variant.value, branch, compiler_env)
 
@@ -951,7 +1000,13 @@ def compile_expr_call_expression(expr, local_scope, compiler_env):
         }
         match, error = args_match(function_spec, args, kwargs)
         if match:
-            return function_spec.compile(args, kwargs, local_scope)
+            try:
+                return function_spec.compile(
+                    make_ftl_source(expr, compiler_env), args, kwargs, local_scope
+                )
+            except exceptions.TypeMismatch as e:
+                compiler_env.add_current_message_error(e, expr)
+                return codegen.CompilationError(dtypes.String)
         else:
             compiler_env.add_current_message_error(error, expr)
             return codegen.CompilationError(dtypes.String)
@@ -960,6 +1015,14 @@ def compile_expr_call_expression(expr, local_scope, compiler_env):
         error = exceptions.ReferenceError("Unknown function: {0}".format(function_name))
         compiler_env.add_current_message_error(error, expr)
         return codegen.CompilationError(dtypes.String)
+
+
+def make_ftl_source(expr, compiler_env):
+    return FtlSource(
+        expr=expr,
+        message_id=compiler_env.current.message_id,
+        message_source=compiler_env.message_source,
+    )
 
 
 def args_match(function_spec, args, kwargs):
@@ -1003,7 +1066,8 @@ class Stringable(codegen.Expression):
     # A kind of 'flexi' expression for args that will convert itself to
     # NumberFormat.format/DateTimeFormat.format calls when you call finalize(),
     # if the arg turned out to be numeric or a datetime
-    def __init__(self, expr, local_scope):
+    def __init__(self, expr, local_scope, from_ftl_source=None):
+        super(Stringable, self).__init__(from_ftl_source=from_ftl_source)
         self.expr = expr
         self.local_scope = local_scope
         self._finalized_expr = None
@@ -1013,8 +1077,7 @@ class Stringable(codegen.Expression):
     def type(self):
         return dtypes.String
 
-    @codegen.handle_type_constaining
-    def constrain_type(self, type_obj):
+    def constrain_type(self, type_obj, from_ftl_source=None):
         self._assigned_types.append(type_obj)
 
     def sub_expressions(self):
@@ -1053,7 +1116,9 @@ class Stringable(codegen.Expression):
                     self.expr, self.expr.type
                 )
             )
-        self._finalized_expr.constrain_type(dtypes.String)
+        self._finalized_expr.constrain_type(
+            dtypes.String, from_ftl_source=self.from_ftl_source
+        )
 
     def as_source_code(self):
         assert self._finalized_expr is not None, "Need to call 'finalize' first"
@@ -1062,6 +1127,17 @@ class Stringable(codegen.Expression):
     def simplify(self, changes):
         assert self._finalized_expr is not None, "Need to call 'finalize' first"
         return self._finalized_expr.simplify(changes)
+
+
+# --- FTL syntax utils ---
+
+
+def span_to_position(span, source_text):
+    start = span.start
+    relevant = source_text[0:start]
+    row = relevant.count("\n") + 1
+    col = len(relevant) - relevant.rfind("\n")
+    return row, col
 
 
 # --- Functions ---
@@ -1181,12 +1257,12 @@ class DateTimeFunction(FluentFunction):
         # "timeStyle",
     }
 
-    def compile(self, args, kwargs, local_scope):
+    def compile(self, ftl_source, args, kwargs, local_scope):
         assert len(args) == 1
         arg = args[0]
         if not kwargs:
             # Simply make sure it is a FluentDate
-            arg.constrain_type(fluent.FluentDate)
+            arg.constrain_type(fluent.FluentDate, from_ftl_source=ftl_source)
             # We will do a DateTimeFormat.format later
             return arg
         else:
@@ -1198,12 +1274,16 @@ class DateTimeFunction(FluentFunction):
 
             initial_opts = local_scope.add_assignment(
                 "initial_opts_",
-                local_scope.variables["Fluent.dateFormattingOptions"].apply(arg),
+                local_scope.variables["Fluent.dateFormattingOptions"].apply(
+                    arg, from_ftl_source=ftl_source
+                ),
             )
             options = codegen.RecordUpdate(initial_opts, **options_updates)
             fdate = local_scope.add_assignment(
                 "fdate_",
-                local_scope.variables["Fluent.reformattedDate"].apply(options, arg),
+                local_scope.variables["Fluent.reformattedDate"].apply(
+                    options, arg, from_ftl_source=ftl_source
+                ),
             )
             return fdate
 
@@ -1221,7 +1301,7 @@ class NumberFunction(FluentFunction):
         "maximumSignificantDigits": maybe_int_parameter,
     }
 
-    def compile(self, args, kwargs, local_scope):
+    def compile(self, ftl_source, args, kwargs, local_scope):
 
         assert len(args) == 1
         arg = args[0]
@@ -1232,7 +1312,7 @@ class NumberFunction(FluentFunction):
             if isinstance(arg, codegen.Number):
                 return arg
             # Otherwise (external arguments) make it a FluentNumber
-            arg.constrain_type(fluent.FluentNumber)
+            arg.constrain_type(fluent.FluentNumber, from_ftl_source=ftl_source)
             # We will do a NumberFormat.format later
             return arg
 
@@ -1250,18 +1330,22 @@ class NumberFunction(FluentFunction):
                 options = codegen.RecordUpdate(default_opts, **options_updates)
                 fnum = local_scope.add_assignment(
                     "fnum_",
-                    local_scope.variables["Fluent.formattedNumber"].apply(options, arg),
+                    local_scope.variables["Fluent.formattedNumber"].apply(
+                        options, arg, from_ftl_source=ftl_source
+                    ),
                 )
             else:
                 initial_opts = local_scope.add_assignment(
                     "initial_opts_",
-                    local_scope.variables["Fluent.numberFormattingOptions"].apply(arg),
+                    local_scope.variables["Fluent.numberFormattingOptions"].apply(
+                        arg, from_ftl_source=ftl_source
+                    ),
                 )
                 options = codegen.RecordUpdate(initial_opts, **options_updates)
                 fnum = local_scope.add_assignment(
                     "fnum_",
                     local_scope.variables["Fluent.reformattedNumber"].apply(
-                        options, arg
+                        options, arg, from_ftl_source=ftl_source
                     ),
                 )
             return fnum

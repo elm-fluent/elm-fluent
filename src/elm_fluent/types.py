@@ -1,6 +1,6 @@
 from __future__ import absolute_import, unicode_literals
 
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from functools import wraps
 
 import attr
@@ -281,6 +281,12 @@ def type_paren_wrap(sig):
         return sig
 
 
+@attr.s
+class TypeSource(object):
+    ftl_source = attr.ib()
+    type_obj = attr.ib()
+
+
 class Record(ElmType):
     def __init__(self, **fields):
         """
@@ -292,8 +298,10 @@ class Record(ElmType):
         for name, type_obj in fields.items():
             self.add_field(name, type_obj)
         self.fixed = bool(fields)
+        if not self.fixed:
+            self.field_type_ftl_sources = defaultdict(list)
 
-    def add_field(self, name, type_obj=None):
+    def add_field(self, name, type_obj=None, from_ftl_source=None):
         """
         Add a field, or set the type for an existing field.
         """
@@ -303,7 +311,17 @@ class Record(ElmType):
             if self.fixed:
                 assert type_obj.constrain(self.fields[name])
             else:
-                self.fields[name] = type_obj.constrain(self.fields[name])
+                if from_ftl_source is not None and type_obj != self.fields[name]:
+                    self.field_type_ftl_sources[name].append(
+                        TypeSource(from_ftl_source, type_obj)
+                    )
+                try:
+                    new_type = type_obj.constrain(self.fields[name])
+                except exceptions.TypeMismatch as e:
+                    raise exceptions.RecordTypeMismatch(
+                        *e.args, record_type=self, field_name=name
+                    )
+                self.fields[name] = new_type
         else:
             if self.fixed:
                 raise AssertionError(
@@ -312,6 +330,10 @@ class Record(ElmType):
                     )
                 )
             self.fields[name] = type_obj
+            if from_ftl_source is not None:
+                self.field_type_ftl_sources[name].append(
+                    TypeSource(from_ftl_source, type_obj)
+                )
 
     def constrain(self, other):
         if isinstance(other, UnconstrainedType):
@@ -335,6 +357,7 @@ class Record(ElmType):
             # but it gets really tricky to re-associate the new object as part
             # of the type of the codegen.Function objects create.
             for n, t in self.fields.items():
+                other.field_type_ftl_sources[n].extend(self.field_type_ftl_sources[n])
                 other.add_field(n, t)
 
         return other
@@ -402,7 +425,7 @@ class Function(ElmType):
             self.output_type.as_signature(from_module, env=env),
         )
 
-    def apply_args(self, args):
+    def apply_args(self, args, from_ftl_source=None):
         """
         Returns that type that would remain after the supplied arguments
         (which are expression objects) are applied.
@@ -429,7 +452,7 @@ class Function(ElmType):
         #
         # TODO fix this second case somehow???
 
-        arg.constrain_type(self.input_type)
+        arg.constrain_type(self.input_type, from_ftl_source=from_ftl_source)
         return self.output_type.apply_args(remainder)
 
 

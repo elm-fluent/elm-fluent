@@ -2,6 +2,10 @@ from __future__ import absolute_import, unicode_literals
 
 
 class FluentError(ValueError):
+    def __init__(self, *args):
+        super(FluentError, self).__init__(*args)
+        self.error_sources = []
+
     # This equality method exists to make exact tests for exceptions much
     # simpler to write, at least for our own errors.
     def __eq__(self, other):
@@ -36,6 +40,13 @@ class BadMessageId(FluentError):
 
 class TypeMismatch(FluentError):
     pass
+
+
+class RecordTypeMismatch(TypeMismatch):
+    def __init__(self, *args, record_type=None, field_name=None):
+        super(RecordTypeMismatch, self).__init__(*args)
+        self.record_type = record_type
+        self.field_name = field_name
 
 
 class HtmlTypeMismatch(FluentError):

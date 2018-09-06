@@ -51,7 +51,7 @@ class TestTypes(unittest.TestCase):
             class Expr(codegen.Expression):
                 type = type_obj
 
-                def constrain_type(self, type_obj):
+                def constrain_type(self, type_obj, from_ftl_source=None):
                     self.type = type_obj
 
             return Expr()

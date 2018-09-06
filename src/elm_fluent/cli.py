@@ -17,6 +17,7 @@ class CompilationOptions(object):
     default_locale = attr.ib()
     missing_translation_strategy = attr.ib()
     use_isolating = attr.ib()
+    cwd = attr.ib()
 
 
 @click.command()
@@ -68,6 +69,7 @@ def main(locales_dir, output_dir, when_missing, default_locale, bdi_isolating):
         default_locale=default_locale,
         missing_translation_strategy=missing_translation_strategy,
         use_isolating=bdi_isolating,
+        cwd=os.getcwd(),
     )
 
     return run_compile(options)

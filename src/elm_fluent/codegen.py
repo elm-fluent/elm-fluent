@@ -5,11 +5,10 @@ from __future__ import absolute_import, unicode_literals
 
 import contextlib
 import re
-from functools import wraps
 
 import six
 
-from elm_fluent import exceptions, types
+from elm_fluent import types
 
 # This module provides simple utilities for building up Elm source code. It
 # implements only what is really needed by compiler.py, with a number of aims
@@ -39,6 +38,9 @@ from elm_fluent import exceptions, types
 
 
 class ElmAst(object):
+    def __init__(self, from_ftl_source=None):
+        self.from_ftl_source = from_ftl_source
+
     def simplify(self, changes):
         """
         Simplify the statement/expression, returning either a modified
@@ -456,8 +458,7 @@ def fixed_type(type_object_or_name):
         def type(self):
             return self._resolve_type()
 
-        @handle_type_constaining
-        def constrain_type(self, type_obj):
+        def constrain_type(self, type_obj, from_ftl_source=None):
             t = type_obj.constrain(self.type)
             assert t is self._resolve_type(), "Expected {0} is {1}".format(
                 t, self._resolve_type()
@@ -526,17 +527,6 @@ class SourceCodeBuilder(object):
             self.add_part(")")
 
 
-def handle_type_constaining(constrain_type_method):
-    @wraps(constrain_type_method)
-    def wrapper(expr_self, type_obj):
-        # TODO
-        # - catch exceptions
-        # - annotate the any changes in type
-        return constrain_type_method(expr_self, type_obj)
-
-    return wrapper
-
-
 class Expression(ElmAst):
     # type represents the Elm type this expression will produce,
     # if we know it (UnconstrainedType otherwise).
@@ -544,18 +534,18 @@ class Expression(ElmAst):
     def type(self):
         return types.UnconstrainedType()
 
-    def constrain_type(self, type_obj):
+    def constrain_type(self, type_obj, from_ftl_source=None):
         raise NotImplementedError(
             "Object {0} of type {1} does not implement constrain_type".format(
                 self, type(self)
             )
         )
 
-    def apply(self, *args):
+    def apply(self, *args, from_ftl_source=None):
         """
         Function application
         """
-        return FunctionCall(self, args)
+        return FunctionCall(self, args, from_ftl_source=from_ftl_source)
 
 
 class Let(Expression, Scope):
@@ -569,8 +559,7 @@ class Let(Expression, Scope):
         assert self.value is not None
         return self.value.type
 
-    @handle_type_constaining
-    def constrain_type(self, type_obj):
+    def constrain_type(self, type_obj, from_ftl_source=None):
         return self.value.constrain_type(type_obj.constrain(self.value.type))
 
     def add_assignment(self, name, value):
@@ -628,10 +617,13 @@ class If(Expression):
         # Does it matter?
         return self.true_branch.type
 
-    @handle_type_constaining
-    def constrain_type(self, type_obj):
-        self.true_branch.constrain_type(type_obj.constrain(self.true_branch.type))
-        self.false_branch.constrain_type(type_obj.constrain(self.false_branch.type))
+    def constrain_type(self, type_obj, from_ftl_source=None):
+        self.true_branch.constrain_type(
+            type_obj.constrain(self.true_branch.type), from_ftl_source=from_ftl_source
+        )
+        self.false_branch.constrain_type(
+            type_obj.constrain(self.false_branch.type), from_ftl_source=from_ftl_source
+        )
 
     def build_source(self, builder):
         with builder.aligned_block():
@@ -688,10 +680,11 @@ class Case(Expression):
         # Does it matter?
         return self.branches[0][1].type
 
-    @handle_type_constaining
-    def constrain_type(self, type_obj):
+    def constrain_type(self, type_obj, from_ftl_source=None):
         for m, val in self.branches:
-            val.constrain_type(type_obj.constrain(val.type))
+            val.constrain_type(
+                type_obj.constrain(val.type), from_ftl_source=from_ftl_source
+            )
 
     def sub_expressions(self):
         yield self.selector
@@ -758,12 +751,13 @@ class List(Bracketing, Expression):
         else:
             return dtypes.List
 
-    @handle_type_constaining
-    def constrain_type(self, type_obj):
+    def constrain_type(self, type_obj, from_ftl_source=None):
         list_type = type_obj.constrain(self.type)
         val_type = list_type.param_dict["a"]
         for val in self.items:
-            val.constrain_type(val_type.constrain(val.type))
+            val.constrain_type(
+                val_type.constrain(val.type), from_ftl_source=from_ftl_source
+            )
 
     def build_source(self, builder):
         if len(self.items) == 0:
@@ -797,10 +791,11 @@ class Concat(Expression):
     def sub_expressions(self):
         return self.parts
 
-    @handle_type_constaining
-    def constrain_type(self, type_obj):
+    def constrain_type(self, type_obj, from_ftl_source=None):
         for part in self.parts:
-            part.constrain_type(type_obj.constrain(part.type))
+            part.constrain_type(
+                type_obj.constrain(part.type), from_ftl_source=from_ftl_source
+            )
 
     def build_source(self, builder):
         builder.add_part(self.function_call + " ")
@@ -856,13 +851,12 @@ class ListConcat(Concat):
     def type(self):
         return self._type
 
-    @handle_type_constaining
-    def constrain_type(self, type_obj):
+    def constrain_type(self, type_obj, from_ftl_source=None):
         assert type_obj == self._type, "Expected {0} == {1}".format(
             type_obj, self._type
         )
         for p in self.parts:
-            p.constrain_type(type_obj)
+            p.constrain_type(type_obj, from_ftl_source=from_ftl_source)
 
     literal = List
     function_call = "List.concat"
@@ -899,8 +893,7 @@ class VariableReference(Expression):
     def type(self):
         return self._definition_scope.get_type(self.name)
 
-    @handle_type_constaining
-    def constrain_type(self, type_obj):
+    def constrain_type(self, type_obj, from_ftl_source=None):
         self._definition_scope.set_type(self.name, type_obj.constrain(self.type))
 
     def build_source(self, builder):
@@ -927,9 +920,10 @@ class AttributeReference(Expression):
     def type(self):
         return self.variable.type.fields[self.attribute_name]
 
-    @handle_type_constaining
-    def constrain_type(self, type_obj):
-        self.variable.type.add_field(self.attribute_name, type_obj)
+    def constrain_type(self, type_obj, from_ftl_source=None):
+        self.variable.type.add_field(
+            self.attribute_name, type_obj, from_ftl_source=from_ftl_source
+        )
 
     def __repr__(self):
         return "<AttributeReference {0}.{1}>".format(
@@ -947,17 +941,19 @@ class AttributeReference(Expression):
 
 class FunctionCall(Expression):
     # Instead of using this directly, normally use expr.apply()
-    def __init__(self, expr, args):
+    def __init__(self, expr, args, from_ftl_source=None):
+        super(FunctionCall, self).__init__(from_ftl_source=from_ftl_source)
         self.expr = expr
         self.args = args
-        self._type = self.expr.type.apply_args(self.args)
+        self._type = self.expr.type.apply_args(
+            self.args, from_ftl_source=from_ftl_source
+        )
 
     @property
     def type(self):
         return self._type
 
-    @handle_type_constaining
-    def constrain_type(self, type_obj):
+    def constrain_type(self, type_obj, from_ftl_source=None):
         # Currently all our functions have fully concrete return types,
         # so we don't need anything beyond this:
         assert self.type == type_obj, "Expected {0} == {1}".format(self.type, type_obj)
@@ -990,8 +986,7 @@ class Otherwise(Expression):
     def type(self):
         return self._type
 
-    @handle_type_constaining
-    def constrain_type(self, type_obj):
+    def constrain_type(self, type_obj, from_ftl_source=None):
         self._type = type_obj.constrain(self._type)
 
     def sub_expressions(self):
@@ -1009,8 +1004,7 @@ class CompilationError(Expression):
     def type(self):
         return self._type
 
-    @handle_type_constaining
-    def constrain_type(self, type_obj):
+    def constrain_type(self, type_obj, from_ftl_source=None):
         # Just assign without complaining
         self._type = type_obj
 
@@ -1076,9 +1070,10 @@ class RecordUpdate(Bracketing, Expression):
     def type(self):
         return self.var.type
 
-    @handle_type_constaining
-    def constrain_type(self, type_obj):
-        self.var.constrain_type(type_obj.constrain(self.var.type))
+    def constrain_type(self, type_obj, from_ftl_source=None):
+        self.var.constrain_type(
+            type_obj.constrain(self.var.type), from_ftl_source=from_ftl_source
+        )
 
     def sub_expressions(self):
         for name, val in self.updates.items():
