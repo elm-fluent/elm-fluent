@@ -15,11 +15,6 @@ from .compiler import (
 )
 from .stubs import defaults as dtypes
 
-try:
-    FileNotFoundError
-except NameError:
-    FileNotFoundError = IOError
-
 
 class MissingTranslationStrategy(object):
     def get_locale_when_missing(self, locale):
@@ -33,7 +28,7 @@ class MissingTranslationStrategy(object):
 
 
 def missing_file(filename, options):
-    exceptions.MissingMessageFile(
+    return exceptions.MissingMessageFile(
         "Message file '{0}' not found".format(os.path.relpath(filename, options.cwd))
     )
 
@@ -98,27 +93,38 @@ def run_compile(options):
         )
 
     stems = find_all_ftl_stems(options.locales_dir, locales)
-    errors = []
-    warnings = []
+    finalizers = []
+    error_printers = []
+    warning_printers = []
     for stem in stems:
-        generate_elm_for_stem(options, locales, stem, errors=errors, warnings=warnings)
-
-    if errors:
-        click.secho(
-            "Compilation to Elm did not succeed, the following errors were reported:",
-            fg="red",
-            bold=True,
+        success, finalizer, error_printer, warning_printer = generate_elm_for_stem(
+            options, locales, stem
         )
-        for error in errors:
-            click.secho(error.args[0], fg="red")
+        if success:
+            finalizers.append(finalizer)
+        if error_printer:
+            error_printers.append(error_printer)
+        if warning_printer:
+            warning_printers.append(warning_printer)
+
+    if warning_printers:
+        click.secho("\nWarnings found:\n", fg="red", bold=True)
+        for wp in warning_printers:
+            wp()
+
+    if error_printers:
+        click.secho("\nErrors found:\n", fg="red", bold=True)
+        for ep in error_printers:
+            ep()
         raise click.Abort()
 
+    for f in finalizers:
+        f()
 
-def generate_elm_for_stem(options, locales, stem, errors=None, warnings=None):
-    if errors is None:
-        errors = []
-    if warnings is None:
-        warnings = []
+
+def generate_elm_for_stem(options, locales, stem):
+    errors = []
+    warnings = []
 
     sources = {}
     locale_modules = {}
@@ -175,21 +181,28 @@ def generate_elm_for_stem(options, locales, stem, errors=None, warnings=None):
         master_filename = path_for_module(options, master_module_name)
         files_to_write.append((master_filename, master_module.as_source_code()))
 
-    print_warnings(warnings)
-    if not errors:
-        for fname, source in files_to_write:
-            ensure_path_dirs(fname)
-            with open(fname, "wb") as f:
-                f.write(source.encode("utf-8"))
+    def finalizer():
+        if not errors:
+            for fname, source in files_to_write:
+                ensure_path_dirs(fname)
+                with open(fname, "wb") as f:
+                    f.write(source.encode("utf-8"))
 
-    else:
+    def error_printer():
         print_errors(options, errors, sources)
-        raise click.Abort()
+
+    def warning_printer():
+        print_warnings(warnings)
+
+    return (
+        len(errors) == 0,
+        finalizer,
+        error_printer if errors else None,
+        warning_printer if warnings else None,
+    )
 
 
 def print_errors(options, errors, sources):
-    if errors:
-        click.secho("Errors found:\n", fg="red", bold=True)
     for err in errors:
         if getattr(err, "error_sources", []):
             for error_source in err.error_sources:
@@ -254,7 +267,8 @@ def print_errors(options, errors, sources):
 
 
 def print_warnings(warnings):
-    pass  # TODO
+    for warning in warnings:
+        click.echo(warning.args[0])
 
 
 def ensure_path_dirs(path):
