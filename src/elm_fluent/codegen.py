@@ -997,7 +997,9 @@ class Otherwise(Expression):
 
 
 class CompilationError(Expression):
-    def __init__(self, type_obj):
+    def __init__(self, type_obj=None):
+        if type_obj is None:
+            type_obj = types.UnconstrainedType()
         self._type = type_obj
 
     @property

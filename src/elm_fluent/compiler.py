@@ -129,7 +129,9 @@ def compile_messages(
 
     Returns a tuple:
        (elm_source,
-        error_list)
+        error_list,
+        message_id_to_function_name_mapping
+       )
 
     elm_source is None if error_list is not empty.
 
@@ -273,15 +275,19 @@ def compile_messages(
                 )
 
     module = codegen.simplify(module)
-    return (module, compiler_env.errors)
+    return (module, compiler_env.errors, compiler_env.message_mapping)
 
 
-def compile_master(module_name, locales, locale_modules, options):
+def compile_master(module_name, locales, locale_modules, message_mapping, options):
     """
     Compile the master 'Translations' Elm file. For every message, this has a function
     that despatches to the function from the correct locale.
     """
+    func_name_to_message_id = {
+        func_name: message_id for message_id, func_name in message_mapping.items()
+    }
     errors = []
+    warnings = []
     module = codegen.Module(name=module_name)
     module.add_import(intl_locale.module, "Locale")
     module.add_import(fluent.module, "Fluent")
@@ -310,6 +316,7 @@ def compile_master(module_name, locales, locale_modules, options):
         assert function_name == func_name, "{0} != {1} unexpectedly".format(
             function_name, func_name
         )
+        message_id = func_name_to_message_id[function_name]
 
         function = codegen.Function(
             parent_scope=module,
@@ -340,20 +347,30 @@ def compile_master(module_name, locales, locale_modules, options):
                 return codegen.CompilationError(dtypes.String)
 
         for locale in locales:
-            # TODO - different strategies for handling missing message functions
-            # or modules
-            # TODO - warnings for missing messages
+            locale_to_use_for_message = None
+            fallback_locale = options.missing_translation_strategy.get_locale_when_missing(
+                locale
+            )
             if locale not in locale_modules:
-                # TODO - what if missing from default?
-                locale_to_use_for_message = options.default_locale
+                locale_to_use_for_message = fallback_locale
+                options.missing_translation_strategy.missing_message(
+                    message_id, locale, errors, warnings
+                )
             else:
                 mod = locale_modules[locale]
                 if func_name not in mod.exports:
-                    locale_to_use_for_message = options.default_locale
+                    locale_to_use_for_message = fallback_locale
+                    options.missing_translation_strategy.missing_message(
+                        message_id, locale, errors, warnings
+                    )
                 else:
                     locale_to_use_for_message = locale
+
             branch = case_expr.add_branch(codegen.String(locale.lower()))
-            branch.value = do_call(locale_to_use_for_message)
+            if locale_to_use_for_message is None:
+                branch.value = codegen.CompilationError()
+            else:
+                branch.value = do_call(locale_to_use_for_message)
         otherwise_branch = case_expr.add_branch(codegen.Otherwise())
         otherwise_branch.value = do_call(options.default_locale)
 
@@ -361,7 +378,7 @@ def compile_master(module_name, locales, locale_modules, options):
         module.add_function(function_name, function)
 
     codegen.simplify(module)
-    return (module, errors)
+    return (module, errors, warnings)
 
 
 def module_name_for_locale(locale_name):

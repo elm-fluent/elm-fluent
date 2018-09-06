@@ -22,6 +22,9 @@ except NameError:
 
 
 class MissingTranslationStrategy(object):
+    def get_locale_when_missing(self, locale):
+        raise NotImplementedError()
+
     def missing_ftl_file(self, options, filename, locale, errors, warnings):
         raise NotImplementedError()
 
@@ -29,11 +32,23 @@ class MissingTranslationStrategy(object):
         raise NotImplementedError()
 
 
+def missing_file(filename, options):
+    exceptions.MissingMessageFile(
+        "Message file '{0}' not found".format(os.path.relpath(filename, options.cwd))
+    )
+
+
 class ErrorWhenMissing(MissingTranslationStrategy):
+    def get_locale_when_missing(self, locale):
+        return None
+
     def missing_ftl_file(self, options, filename, locale, errors, warnings):
+        errors.append(missing_file(filename, options))
+
+    def missing_message(self, message_id, locale, errors, warnings):
         errors.append(
-            FileNotFoundError(
-                "{0} - file not found".format(os.path.relpath(filename, options.cwd))
+            exceptions.MissingMessage(
+                "Locale '{0}' - Message '{1}' missing".format(locale, message_id)
             )
         )
 
@@ -42,12 +57,28 @@ class FallbackToDefaultLocaleWhenMissing(MissingTranslationStrategy):
     def __init__(self, fallback_locale):
         self.fallback_locale = fallback_locale
 
-    def missing_ftl_file(self, options, filename, locale, errors, warnings):
-        if locale == self.fallback_locale:
-            # Can't fall back to anything if the fallback is missing
-            errors.append(FileNotFoundError("{0} not found".format(filename)))
+    def _can_fallback(self, locale):
+        return locale != self.fallback_locale
+
+    def get_locale_when_missing(self, locale):
+        if self._can_fallback(locale):
+            return self.fallback_locale
         else:
-            warnings.append(FileNotFoundError("{0} not found".format(filename)))
+            return None
+
+    def missing_ftl_file(self, options, filename, locale, errors, warnings):
+        if not self._can_fallback(locale):
+            # Can't fall back to anything if the fallback is missing
+            errors.append(missing_file(filename, options))
+        else:
+            warnings.append(missing_file(filename, options))
+
+    def missing_message(self, message_id, locale, errors, warnings):
+        warnings.append(
+            exceptions.MissingMessage(
+                "Locale '{0}' - Message '{1}' missing".format(locale, message_id)
+            )
+        )
 
 
 def run_compile(options):
@@ -92,6 +123,7 @@ def generate_elm_for_stem(options, locales, stem, errors=None, warnings=None):
     sources = {}
     locale_modules = {}
     files_to_write = []
+    master_message_mapping = {}
     for locale in locales:
         filename = os.path.join(options.locales_dir, locale, stem)
         module_name = module_name_for_stem(stem, locale=locale)
@@ -99,7 +131,7 @@ def generate_elm_for_stem(options, locales, stem, errors=None, warnings=None):
             with open(filename, "rb") as f:
                 messages_string = f.read().decode("utf-8")
             sources[filename] = messages_string
-            module, compile_errors = compile_messages(
+            module, compile_errors, message_mapping = compile_messages(
                 messages_string,
                 locale,
                 message_source=filename,
@@ -107,6 +139,7 @@ def generate_elm_for_stem(options, locales, stem, errors=None, warnings=None):
                 use_isolating=options.use_isolating,
             )
             locale_modules[locale] = module
+            master_message_mapping.update(message_mapping)
             new_elm_path = path_for_module(options, module_name)
             if compile_errors:
                 errors.extend(compile_errors)
@@ -119,8 +152,8 @@ def generate_elm_for_stem(options, locales, stem, errors=None, warnings=None):
 
     master_module_name = module_name_for_stem(stem, master=True)
     try:
-        master_module, master_errors = compile_master(
-            master_module_name, locales, locale_modules, options
+        master_module, master_errors, master_warnings = compile_master(
+            master_module_name, locales, locale_modules, master_message_mapping, options
         )
     except Exception as e:
         click.secho(
@@ -129,13 +162,14 @@ def generate_elm_for_stem(options, locales, stem, errors=None, warnings=None):
             bold=True,
         )
         click.secho(
-            "Please report this as a bug to https://github.com/elm-fluent/elm-fluent.",
+            "Please report this as a bug to https://github.com/elm-fluent/elm-fluent",
             fg="red",
             bold=True,
         )
         raise e
 
     errors.extend(master_errors)
+    warnings.extend(master_warnings)
 
     if not master_errors:
         master_filename = path_for_module(options, master_module_name)
@@ -157,7 +191,7 @@ def print_errors(options, errors, sources):
     if errors:
         click.secho("Errors found:\n", fg="red", bold=True)
     for err in errors:
-        if getattr(err, "error_sources"):
+        if getattr(err, "error_sources", []):
             for error_source in err.error_sources:
                 source_filename = error_source.message_source
                 row, col = span_to_position(
@@ -217,7 +251,6 @@ def print_errors(options, errors, sources):
                     click.echo(
                         "  Hint: You may need to use NUMBER() or DATETIME() builtins to force the correct type"
                     )
-        click.echo("")
 
 
 def print_warnings(warnings):

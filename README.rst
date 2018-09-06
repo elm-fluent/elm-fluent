@@ -38,9 +38,8 @@ information.
 Status
 ------
 
-* Alpha, but usable
-* Under very heavy development
-* A working test suite
+* Rough around the edges, but usable
+* A pretty complete test suite
 * Compatibility: Elm 0.18 only at the moment.
 * Free software: MIT license
 
@@ -52,7 +51,7 @@ Main TODO items
 * DONE: NUMBER and DATETIME builtin functions (using `elm-intl <https://github.com/vanwagonet/elm-intl>`_,
   which means you need `elm-github-install <https://github.com/gdotdesign/elm-github-install/>`_ to install at the moment.
 * DONE: Mechanism for HTML messages, with attaching of event handlers or other arbitrary Attributes to nodes
-* TODO: Good error handling for all errors in FTL files
+* DONE: Good error handling for all errors in FTL files
 * TODO: Docs!!!
 
 Credits

@@ -26,7 +26,7 @@ def compile_messages_to_elm(
     use_isolating=False,
     dynamic_html_attributes=True,
 ):
-    module, errors = compile_messages(
+    module, errors, _ = compile_messages(
         dedent_ftl(source),
         locale,
         module_name=module_name,

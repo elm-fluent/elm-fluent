@@ -34,6 +34,14 @@ class JunkFound(FluentError):
         self.annotations = args[1]
 
 
+class MissingMessage(FluentError):
+    pass
+
+
+class MissingMessageFile(FluentError):
+    pass
+
+
 class BadMessageId(FluentError):
     pass
 
