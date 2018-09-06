@@ -118,9 +118,25 @@ def generate_elm_for_stem(options, locales, stem, errors=None, warnings=None):
             )
 
     master_module_name = module_name_for_stem(stem, master=True)
-    master_module, master_errors = compile_master(
-        master_module_name, locales, locale_modules, options
-    )
+    try:
+        master_module, master_errors = compile_master(
+            master_module_name, locales, locale_modules, options
+        )
+    except Exception as e:
+        click.secho(
+            "While compiling {0}, an exception occurred.".format(master_module_name),
+            fg="red",
+            bold=True,
+        )
+        click.secho(
+            "Please report this as a bug to https://github.com/elm-fluent/elm-fluent.",
+            fg="red",
+            bold=True,
+        )
+        raise e
+
+    errors.extend(master_errors)
+
     if not master_errors:
         master_filename = path_for_module(options, master_module_name)
         files_to_write.append((master_filename, master_module.as_source_code()))
@@ -141,7 +157,7 @@ def print_errors(options, errors, sources):
     if errors:
         click.secho("Errors found:\n", fg="red", bold=True)
     for err in errors:
-        if hasattr(err, "error_sources"):
+        if getattr(err, "error_sources"):
             for error_source in err.error_sources:
                 source_filename = error_source.message_source
                 row, col = span_to_position(
@@ -163,7 +179,15 @@ def print_errors(options, errors, sources):
                         "{0}:{1}:{2}: {3}".format(short_filename, row, col, err.args[0])
                     )
         else:
-            click.echo(err.args[0])
+            if hasattr(err, "message_func_name"):
+                click.echo(
+                    "While trying to compile master '{0}' function:".format(
+                        err.message_func_name
+                    )
+                )
+                click.echo("  {0}".format(err.args[0]))
+            else:
+                click.echo(err.args[0])
         if isinstance(err, exceptions.RecordTypeMismatch):
             click.echo(
                 "  Explanation: incompatible types were detected for message argument '${0}'".format(

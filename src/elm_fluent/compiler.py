@@ -325,11 +325,19 @@ def compile_master(module_name, locales, locale_modules, options):
         case_expr = codegen.Case(lower_cased_locale_tag_expr, parent_scope=function)
 
         def do_call(l):
-            return function.variables[
-                "{0}.{1}".format(locale_module_local_names[l], func_name)
-            ].apply(
-                *[function.variables[a] for a in function_args_for_func_name(func_name)]
-            )
+            try:
+                return function.variables[
+                    "{0}.{1}".format(locale_module_local_names[l], func_name)
+                ].apply(
+                    *[
+                        function.variables[a]
+                        for a in function_args_for_func_name(func_name)
+                    ]
+                )
+            except exceptions.TypeMismatch as e:
+                e.message_func_name = function_name
+                errors.append(e)
+                return codegen.CompilationError(dtypes.String)
 
         for locale in locales:
             # TODO - different strategies for handling missing message functions
