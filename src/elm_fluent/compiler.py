@@ -863,10 +863,14 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
 
     # TODO - test for what happens here when there is a type mismatch,
     # possibly wrap in try/catch etc.
-    selector_value.constrain_type(
-        inferred_key_type,
-        from_ftl_source=make_ftl_source(constraining_ftl_expr, compiler_env),
-    )
+    try:
+        selector_value.constrain_type(
+            inferred_key_type,
+            from_ftl_source=make_ftl_source(constraining_ftl_expr, compiler_env),
+        )
+    except exceptions.TypeMismatch as e:
+        compiler_env.add_current_message_error(e, select_expr.selector)
+        return codegen.CompilationError(dtypes.String)
 
     def get_plural_form(number_val):
         return local_scope.variables["PluralRules.select"].apply(

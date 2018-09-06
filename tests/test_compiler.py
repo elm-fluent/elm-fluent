@@ -11,7 +11,7 @@ from elm_fluent.compiler import (
     message_function_name_for_msg_id,
     span_to_position,
 )
-from elm_fluent.stubs import fluent
+from elm_fluent.stubs import defaults as dtypes, fluent
 
 from .test_codegen import normalize_elm
 from .utils import dedent_ftl
@@ -1026,6 +1026,55 @@ class TestCompiler(unittest.TestCase):
                             "You have some things"
         """,
         )
+
+    def test_select_mismtatch(self):
+        src = dedent_ftl(
+            """
+            foo = { 1 ->
+                [x]   X
+               *[y]   Y
+             }
+        """
+        )
+
+        code, errs = compile_messages_to_elm(src, self.locale)
+        self.assertEqual(len(errs), 1)
+        err = errs[0]
+        self.assertEqual(type(err), exceptions.TypeMismatch)
+        self.assertEqual(span_to_position(err.error_sources[0].expr.span, src), (1, 9))
+        # TODO - it would be nice to capture the other places that are causing
+        # the type mismatch (e.g. the [x] key), but we don't have the
+        # infrastructure for that and it is low priority.
+
+    def test_select_mismtatch_with_arg(self):
+        src = dedent_ftl(
+            """
+            foo = { NUMBER($count) ->
+                [x]   X
+               *[y]   Y
+             }
+        """
+        )
+
+        code, errs = compile_messages_to_elm(src, self.locale)
+        self.assertEqual(len(errs), 1)
+        err = errs[0]
+        self.assertEqual(span_to_position(err.error_sources[0].expr.span, src), (1, 9))
+
+        self.assertEqual(type(err), exceptions.RecordTypeMismatch)
+        self.assertEqual(err.field_name, "count")
+        type_sources = err.record_type.field_type_ftl_sources["count"]
+        self.assertEqual(len(type_sources), 2)
+
+        self.assertEqual(
+            span_to_position(type_sources[0].ftl_source.expr.span, src), (1, 9)
+        )
+        self.assertEqual(type_sources[0].type_obj, fluent.FluentNumber)
+
+        self.assertEqual(
+            span_to_position(type_sources[1].ftl_source.expr.span, src), (2, 5)
+        )
+        self.assertEqual(type_sources[1].type_obj, dtypes.String)
 
     def test_select_mixed_numeric_last_not_default(self):
         code, errs = compile_messages_to_elm(
