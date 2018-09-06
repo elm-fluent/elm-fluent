@@ -330,7 +330,7 @@ class TestCodeGen(unittest.TestCase):
 
     def test_string_join_two(self):
         scope = codegen.Scope()
-        scope.reserve_name("tmp")
+        scope.reserve_name("tmp", type=dtypes.String)
         var = scope.variables["tmp"]
         join = codegen.StringConcat([codegen.String("hello "), var])
         self.assertCodeEqual(
@@ -344,7 +344,7 @@ class TestCodeGen(unittest.TestCase):
 
     def test_string_join_collapse_strings(self):
         scope = codegen.Scope()
-        scope.reserve_name("tmp")
+        scope.reserve_name("tmp", type=dtypes.String)
         var = scope.variables["tmp"]
         join1 = codegen.StringConcat(
             [

@@ -440,29 +440,24 @@ class Function(Scope, Statement):
         return self
 
 
+def resolve_type(type_object_or_name):
+    # To avoid circular imports, we accept a string to represent types
+    # in dtypes
+    from .stubs import defaults as dtypes
+
+    if isinstance(type_object_or_name, six.text_type):
+        return getattr(dtypes, type_object_or_name)
+    else:
+        return type_object_or_name
+
+
 def fixed_type(type_object_or_name):
     class FixedType(object):
         _type_object_or_name = type_object_or_name
 
-        def _resolve_type(self):
-            if isinstance(self._type_object_or_name, six.text_type):
-                # To avoid circular imports, we accept a string to represent types
-                # in dtypes
-                from .stubs import defaults as dtypes
-
-                return getattr(dtypes, self._type_object_or_name)
-            else:
-                return self._type_object_or_name
-
         @property
         def type(self):
-            return self._resolve_type()
-
-        def constrain_type(self, type_obj, from_ftl_source=None):
-            t = type_obj.constrain(self.type)
-            assert t is self._resolve_type(), "Expected {0} is {1}".format(
-                t, self._resolve_type()
-            )
+            return resolve_type(self._type_object_or_name)
 
     return FixedType
 
@@ -705,6 +700,10 @@ class Literal(Expression):
     def sub_expressions(self):
         return []
 
+    def constrain_type(self, type_obj, from_ftl_source=None):
+        t = type_obj.constrain(self.type)
+        assert t is self.type, "Expected {0} is {1}".format(t, self.type)
+
 
 class Bracketing(object):
     """
@@ -782,7 +781,8 @@ class List(Bracketing, Expression):
 
 
 class Concat(Expression):
-    def __init__(self, parts):
+    def __init__(self, parts, from_ftl_source=None):
+        super(Concat, self).__init__(from_ftl_source=from_ftl_source)
         self.parts = parts
 
     def __repr__(self):
@@ -1021,7 +1021,7 @@ class CompilationError(Expression):
         return []
 
 
-def infix_operator(operator, return_type):
+def infix_operator(operator, return_type, operand_type):
     class Op(fixed_type(return_type), Bracketing, Expression):
         def __init__(self, left, right):
             self.left = left
@@ -1043,11 +1043,15 @@ def infix_operator(operator, return_type):
             yield self.left
             yield self.right
 
+        def constrain_type(self, type_obj, from_ftl_source=None):
+            self.left.constrain_type(type_obj.constrain(resolve_type(operand_type)))
+            self.right.constrain_type(type_obj.constrain(resolve_type(operand_type)))
+
     return Op
 
 
-Equals = infix_operator("==", "Bool")
-Add = infix_operator("+", "Number")
+Equals = infix_operator("==", "Bool", types.UnconstrainedType())
+Add = infix_operator("+", "Number", "Number")
 
 
 class RecordUpdate(Bracketing, Expression):

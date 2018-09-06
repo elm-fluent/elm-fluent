@@ -1374,7 +1374,7 @@ class TestHtml(unittest.TestCase):
         self.assertCodeEqual(
             code,
             """
-            attributesHtml : Locale.Locale -> { a | arg : b } -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            attributesHtml : Locale.Locale -> { a | arg : String } -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
             attributesHtml locale_ args_ attrs_ =
                 [ Html.b (List.concat [ [ Attributes.class (String.concat [ "foo"
                                                                           , bar locale_ args_
@@ -1405,6 +1405,31 @@ class TestHtml(unittest.TestCase):
         )
         self.assertEqual(errs, [])
 
+    def test_non_string_args_in_attributes(self):
+        code, errs = compile_messages_to_elm(
+            """
+            number-attribute-html = <b data-foo="{ NUMBER($arg) }">text</b>
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            numberAttributeHtml : Locale.Locale -> { a | arg : Fluent.FluentNumber number } -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            numberAttributeHtml locale_ args_ attrs_ =
+                [ Html.b (List.concat [ [ Attributes.attribute "data-foo" (Fluent.formatNumber locale_ args_.arg)
+                                        ]
+                                      , Fluent.selectAttributes attrs_ [ "b"
+                                                                       , "[data-foo]"
+                                                                       , "b[data-foo]"
+                                                                       ]
+                                      ]) [ Html.text "text"
+                                         ]
+                ]
+            """,
+        )
+        self.assertEqual(errs, [])
+
     def test_argument(self):
         code, errs = compile_messages_to_elm(
             """
@@ -1422,6 +1447,29 @@ class TestHtml(unittest.TestCase):
                 , Html.b [] [ Html.text args_.username
                             ]
                 , Html.text "!"
+                ]
+             """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_non_string_args_in_text(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo-html = <b>Text { $arg } { DATETIME($arg) }</b>
+            """,
+            self.locale,
+            dynamic_html_attributes=False,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            fooHtml : Locale.Locale -> { a | arg : Fluent.FluentDate } -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            fooHtml locale_ args_ attrs_ =
+                [ Html.b [] [ Html.text "Text "
+                            , Html.text (Fluent.formatDate locale_ args_.arg)
+                            , Html.text " "
+                            , Html.text (Fluent.formatDate locale_ args_.arg)
+                            ]
                 ]
              """,
         )

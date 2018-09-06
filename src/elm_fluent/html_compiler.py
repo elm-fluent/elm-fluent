@@ -94,8 +94,17 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
                     else:
                         with compiler_env.modified(html_context=False):
                             attr_output_parts.append(
-                                compiler.compile_expr(part, local_scope, compiler_env)
+                                compiler.Stringable(
+                                    compiler.compile_expr(
+                                        part, local_scope, compiler_env
+                                    ),
+                                    local_scope,
+                                    from_ftl_source=compiler.make_ftl_source(
+                                        part, compiler_env
+                                    ),
+                                )
                             )
+
                 attr_final_value = codegen.StringConcat(attr_output_parts)
 
                 if attr_name in html_attributes.ATTRIBUTES:
