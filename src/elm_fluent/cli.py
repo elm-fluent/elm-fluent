@@ -18,6 +18,7 @@ class CompilationOptions(object):
     missing_translation_strategy = attr.ib()
     use_isolating = attr.ib()
     cwd = attr.ib()
+    verbose = attr.ib(default=False)
 
 
 @click.command()
@@ -41,7 +42,8 @@ class CompilationOptions(object):
     default=True,
     help="Use BDI isolating characters",
 )
-def main(locales_dir, output_dir, when_missing, default_locale, bdi_isolating):
+@click.option("--verbose/--quiet", default=False, help="More verbose output")
+def main(locales_dir, output_dir, when_missing, default_locale, bdi_isolating, verbose):
     locales_dir = os.path.normpath(os.path.abspath(locales_dir))
     if not os.path.exists(locales_dir) or not os.path.isdir(locales_dir):
         raise click.UsageError(
@@ -70,6 +72,7 @@ def main(locales_dir, output_dir, when_missing, default_locale, bdi_isolating):
         missing_translation_strategy=missing_translation_strategy,
         use_isolating=bdi_isolating,
         cwd=os.getcwd(),
+        verbose=verbose,
     )
 
     return run_compile(options)

@@ -108,18 +108,23 @@ def run_compile(options):
             warning_printers.append(warning_printer)
 
     if warning_printers:
-        click.secho("\nWarnings found:\n", fg="red", bold=True)
+        click.secho("\nWarnings:\n", fg="red", bold=True)
         for wp in warning_printers:
             wp()
 
     if error_printers:
-        click.secho("\nErrors found:\n", fg="red", bold=True)
+        click.secho("\nErrors:\n", fg="red", bold=True)
         for ep in error_printers:
             ep()
         raise click.Abort()
 
+    if options.verbose:
+        click.secho("\nWriting files:\n", fg="green", bold=True)
     for f in finalizers:
         f()
+
+    if options.verbose:
+        click.secho("Success!", fg="green", bold=True)
 
 
 def generate_elm_for_stem(options, locales, stem):
@@ -190,6 +195,10 @@ def generate_elm_for_stem(options, locales, stem):
                     # must avoid writing it
                     source = module.as_source_code()
                     ensure_path_dirs(fname)
+                    if options.verbose:
+                        click.echo(
+                            "Writing {0}".format(os.path.relpath(fname, options.cwd))
+                        )
                     with open(fname, "wb") as f:
                         f.write(source.encode("utf-8"))
 
