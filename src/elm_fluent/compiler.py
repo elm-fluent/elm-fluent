@@ -264,7 +264,7 @@ def compile_messages(
                     name=function_name,
                     args=function_args_for_func_name(function_name),
                 )
-                function.body.value = codegen.CompilationError(dtypes.String)
+                function.body.value = codegen.CompilationError()
             else:
                 function = compile_message(
                     msg, msg_id, function_name, module, compiler_env
@@ -345,7 +345,7 @@ def compile_master(module_name, locales, locale_modules, message_mapping, option
             except exceptions.TypeMismatch as e:
                 e.message_func_name = function_name
                 errors.append(e)
-                return codegen.CompilationError(dtypes.String)
+                return codegen.CompilationError()
 
         for locale in locales:
             locale_to_use_for_message = None
@@ -492,7 +492,7 @@ def compile_message(msg, msg_id, function_name, module, compiler_env):
             "Cyclic reference in {0}".format(msg_id)
         )
         compiler_env.add_current_message_error(error, msg)
-        return codegen.CompilationError(dtypes.String)
+        return codegen.CompilationError()
     else:
         return_expression = compile_expr(msg, msg_func.body, compiler_env)
     msg_func.body.value = return_expression
@@ -742,7 +742,7 @@ def compile_expr_message_reference(reference, local_scope, compiler_env):
         return do_message_call(name, local_scope, reference, compiler_env)
     except exceptions.TypeMismatch as e:
         compiler_env.add_current_message_error(e, reference)
-        return codegen.CompilationError(dtypes.String)
+        return codegen.CompilationError()
 
 
 @compile_expr.register(ast.TermReference)
@@ -754,7 +754,7 @@ def compile_expr_term_reference(reference, local_scope, compiler_env):
     else:
         error = exceptions.ReferenceError("Unknown term: {0}".format(name))
         compiler_env.add_current_message_error(error, reference)
-        return codegen.CompilationError(dtypes.String)
+        return codegen.CompilationError()
 
 
 def do_message_call(name, local_scope, expr, compiler_env):
@@ -772,7 +772,7 @@ def do_message_call(name, local_scope, expr, compiler_env):
                     ),
                     expr,
                 )
-                return codegen.CompilationError(dtypes.String)
+                return codegen.CompilationError()
 
         return local_scope.variables[msg_func_name].apply(
             *[
@@ -790,7 +790,7 @@ def unknown_reference(name, local_scope, expr, compiler_env):
     else:
         error = exceptions.ReferenceError("Unknown message: {0}".format(name))
     compiler_env.add_current_message_error(error, expr)
-    return codegen.CompilationError(dtypes.String)
+    return codegen.CompilationError()
 
 
 @compile_expr.register(ast.AttributeExpression)
@@ -827,7 +827,7 @@ def compile_expr_variant_list(
                 "Unknown variant: {0}[{1}]".format(term_id, selected_key.name)
             )
             compiler_env.add_current_message_error(error, selected_key)
-            return codegen.CompilationError(dtypes.String)
+            return codegen.CompilationError()
     return compile_expr(found.value, local_scope, compiler_env)
 
 
@@ -879,8 +879,6 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
     else:
         inferred_key_type = dtypes.String
 
-    # TODO - test for what happens here when there is a type mismatch,
-    # possibly wrap in try/catch etc.
     try:
         selector_value.constrain_type(
             inferred_key_type,
@@ -888,7 +886,7 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
         )
     except exceptions.TypeMismatch as e:
         compiler_env.add_current_message_error(e, select_expr.selector)
-        return codegen.CompilationError(dtypes.String)
+        return codegen.CompilationError()
 
     def get_plural_form(number_val):
         return local_scope.variables["PluralRules.select"].apply(
@@ -1001,11 +999,11 @@ def compile_expr_variant_expression(variant_expr, local_scope, compiler_env):
                 "Unknown variant: {0}[{1}]".format(term_id, variant_expr.key.name)
             )
             compiler_env.add_current_message_error(error, variant_expr)
-            return codegen.CompilationError(dtypes.String)
+            return codegen.CompilationError()
     else:
         error = exceptions.ReferenceError("Unknown term: {0}".format(term_id))
         compiler_env.add_current_message_error(error, variant_expr)
-        return codegen.CompilationError(dtypes.String)
+        return codegen.CompilationError()
 
 
 @compile_expr.register(ast.VariableReference)
@@ -1036,15 +1034,15 @@ def compile_expr_call_expression(expr, local_scope, compiler_env):
                 )
             except exceptions.TypeMismatch as e:
                 compiler_env.add_current_message_error(e, expr)
-                return codegen.CompilationError(dtypes.String)
+                return codegen.CompilationError()
         else:
             compiler_env.add_current_message_error(error, expr)
-            return codegen.CompilationError(dtypes.String)
+            return codegen.CompilationError()
 
     else:
         error = exceptions.ReferenceError("Unknown function: {0}".format(function_name))
         compiler_env.add_current_message_error(error, expr)
-        return codegen.CompilationError(dtypes.String)
+        return codegen.CompilationError()
 
 
 def make_ftl_source(expr, compiler_env):

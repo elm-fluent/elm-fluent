@@ -1676,6 +1676,3 @@ class TestHtml(unittest.TestCase):
             """,
         )
         self.assertEqual(errs, [])
-
-    # TODO - check all CompilationError usages that assume String return type,
-    # adjust for Html return types
