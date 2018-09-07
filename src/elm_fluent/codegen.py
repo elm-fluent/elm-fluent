@@ -536,10 +536,15 @@ class Expression(ElmAst):
             )
         )
 
-    def apply(self, *args, from_ftl_source=None):
+    # Python 2.7 compatible kwarg syntax
+    def apply(self, *args, **kwargs):
         """
         Function application
         """
+        from_ftl_source = kwargs.pop("from_ftl_source", None)
+        assert not kwargs, "Unexpected keyword args {0}".format(
+            ", ".join(kwargs.keys())
+        )
         return FunctionCall(self, args, from_ftl_source=from_ftl_source)
 
 

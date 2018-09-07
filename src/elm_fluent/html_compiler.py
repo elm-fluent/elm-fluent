@@ -227,7 +227,7 @@ def get_selectors_for_node(node, expr_replacements):
 
     def is_static_only(attr_value):
         parts = interpolate_replacements(attr_value, expr_replacements)
-        return all(isinstance(p, text_type) for p in parts)
+        return all(isinstance(p, string_types) for p in parts)
 
     classes = node.attrs.get("class", [])
     if is_static_only(" ".join(classes)):
