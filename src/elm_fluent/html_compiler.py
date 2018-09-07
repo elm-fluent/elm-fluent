@@ -42,7 +42,7 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
             for part in parts:
                 if isinstance(part, string_types):
                     items.append(
-                        codegen.List(
+                        HtmlList(
                             [
                                 local_scope.variables["Html.text"].apply(
                                     codegen.String(text_type(part))
@@ -52,20 +52,6 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
                     )
                 else:
                     val = compiler.compile_expr(part, local_scope, compiler_env)
-                    # TODO - we should optimize outputted code by replacing:
-                    #  [ ...
-                    #  , Html.text a
-                    #  , Html.text b
-                    #  , Html.text c
-                    #  ...
-                    #  ]
-                    #
-                    # with:
-                    # [ ...
-                    # , Html.text (String.concat [a, b, c])
-                    # ...
-                    # ]
-
                     if val.type == html_output_type:
                         # This is a list type, so simply append to our list of lists
                         items.append(val)
@@ -73,7 +59,7 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
                         val = local_scope.variables["Html.text"].apply(
                             compiler.Stringable(val, local_scope)
                         )
-                        items.append(codegen.List([val]))
+                        items.append(HtmlList([val]))
         else:
             assert isinstance(node, bs4.element.Tag)
             tag_name = node.name.lower()
@@ -148,9 +134,51 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
                     codegen.String(tag_name)
                 )
             item = node_constructor.apply(attributes, sub_items)
-            items.append(codegen.List([item]))
+            items.append(HtmlList([item]))
 
-    return codegen.ListConcat(items, html_output_type)
+    return HtmlListConcat(items)
+
+
+class HtmlList(codegen.List):
+    def simplify(self, changes):
+        retval = super(HtmlList, self).simplify(changes)
+        if retval is not self:
+            return retval
+
+        def is_html_text_call(item):
+            return (
+                isinstance(item, codegen.FunctionCall)
+                and isinstance(item.expr, codegen.VariableReference)
+                and (
+                    "{0}.{1}".format(item.expr.module_name, item.expr.name)
+                    == "Html.text"
+                )
+            )
+
+        new_items = []
+        for item in self.items:
+            if (
+                len(new_items) > 0
+                and is_html_text_call(new_items[-1])
+                and is_html_text_call(item)
+            ):
+                last_item = new_items[-1]
+                if not isinstance(last_item.args[0], codegen.StringConcat):
+                    last_item.args = [codegen.StringConcat([last_item.args[0]])]
+
+                last_item.args[0].parts.append(item.args[0])
+                changes.append(True)
+            else:
+                new_items.append(item)
+        self.items = new_items
+        return self
+
+
+class HtmlListConcat(codegen.ListConcat):
+    literal = HtmlList
+
+    def __init__(self, parts):
+        super(HtmlListConcat, self).__init__(parts, html_output_type)
 
 
 def replace_non_text_expressions(elements):

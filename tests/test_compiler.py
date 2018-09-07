@@ -1465,10 +1465,11 @@ class TestHtml(unittest.TestCase):
             """
             fooHtml : Locale.Locale -> { a | arg : Fluent.FluentDate } -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
             fooHtml locale_ args_ attrs_ =
-                [ Html.b [] [ Html.text "Text "
-                            , Html.text (Fluent.formatDate locale_ args_.arg)
-                            , Html.text " "
-                            , Html.text (Fluent.formatDate locale_ args_.arg)
+                [ Html.b [] [ Html.text (String.concat [ "Text "
+                                                       , Fluent.formatDate locale_ args_.arg
+                                                       , " "
+                                                       , Fluent.formatDate locale_ args_.arg
+                                                       ])
                             ]
                 ]
              """,
@@ -1608,14 +1609,16 @@ class TestHtml(unittest.TestCase):
                               ]
                             , case args_.gender of
                                   "male" ->
-                                      [ Html.b [] [ Html.text "Mr. "
-                                                  , Html.text args_.surname
+                                      [ Html.b [] [ Html.text (String.concat [ "Mr. "
+                                                                             , args_.surname
+                                                                             ])
                                                   ]
                                       , Html.text ", nice to see you"
                                       ]
                                   "female" ->
-                                      [ Html.b [] [ Html.text "Ms. "
-                                                  , Html.text args_.surname
+                                      [ Html.b [] [ Html.text (String.concat [ "Ms. "
+                                                                             , args_.surname
+                                                                             ])
                                                   ]
                                       , Html.text ", nice to see you"
                                       ]
@@ -1639,14 +1642,12 @@ class TestHtml(unittest.TestCase):
             self.locale,
             dynamic_html_attributes=False,
         )
-        # TODO SOMEDAY - it would be nice to merge adjacent 'Html.text' calls here
         self.assertCodeEqual(
             code,
             """
             welcomeHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
             welcomeHtml locale_ args_ attrs_ =
-                [ Html.text "Welcome to "
-                , Html.text "Awesomeness"
+                [ Html.text "Welcome to Awesomeness"
                 , Html.sup [] [ Html.text "2"
                               ]
                 ]

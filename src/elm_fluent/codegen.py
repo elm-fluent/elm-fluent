@@ -836,10 +836,10 @@ class StringConcat(fixed_type("String"), Concat):
     function_call = "String.concat"
 
     def empty(self):
-        return String("")
+        return self.literal("")
 
     def merge_two(self, part1, part2):
-        return String(part1.string_value + part2.string_value)
+        return self.literal(part1.string_value + part2.string_value)
 
 
 class ListConcat(Concat):
@@ -862,10 +862,10 @@ class ListConcat(Concat):
     function_call = "List.concat"
 
     def empty(self):
-        return List([])
+        return self.literal([])
 
     def merge_two(self, part1, part2):
-        return List(part1.items + part2.items)
+        return self.literal(part1.items + part2.items)
 
 
 class VariableReference(Expression):
