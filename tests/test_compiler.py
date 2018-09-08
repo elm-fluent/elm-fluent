@@ -1360,6 +1360,26 @@ class TestHtml(unittest.TestCase):
         )
         self.assertEqual(errs, [])
 
+    def test_dynamic_attributes_2(self):
+        code, errs = compile_messages_to_elm(
+            """
+            attributes-html = <b>text</b>
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            attributesHtml : Locale.Locale -> a -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            attributesHtml locale_ args_ attrs_ =
+                [ Html.b (Fluent.selectAttributes attrs_ [ "b"
+                                                         ]) [ Html.text "text"
+                                                            ]
+                ]
+            """,
+        )
+        self.assertEqual(errs, [])
+
     def test_attribute_substitution(self):
         # If we have any non-static text in attributes, we can't use them for attribute selectors
         code, errs = compile_messages_to_elm(

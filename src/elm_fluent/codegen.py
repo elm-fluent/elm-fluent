@@ -820,7 +820,8 @@ class Concat(Expression):
             ):
                 new_parts[-1] = self.merge_two(new_parts[-1], part)
             else:
-                new_parts.append(part)
+                if not self.is_empty(part):
+                    new_parts.append(part)
         if len(new_parts) < len(self.parts):
             changes.append(True)
         self.parts = new_parts
@@ -839,6 +840,9 @@ class Concat(Expression):
 class StringConcat(fixed_type("String"), Concat):
     literal = String
     function_call = "String.concat"
+
+    def is_empty(self, part):
+        return isinstance(part, String) and part.string_value == ""
 
     def empty(self):
         return self.literal("")
@@ -865,6 +869,9 @@ class ListConcat(Concat):
 
     literal = List
     function_call = "List.concat"
+
+    def is_empty(self, part):
+        return isinstance(part, List) and len(part.items) == 0
 
     def empty(self):
         return self.literal([])
