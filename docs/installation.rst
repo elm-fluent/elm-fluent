@@ -62,8 +62,9 @@ respectively.
 
 However, these Javascript APIs are not yet wrapped by any core Elm libraries,
 although `the core team are looking into it
-<https://discourse.elm-lang.org/t/state-of-localization-l10n-and-v0-19/1541/18>`_.
-Until then elm-fluent depends on the `elm-intl
+<https://discourse.elm-lang.org/t/state-of-localization-l10n-and-v0-19/1541/18>`_,
+and implementing them in pure Elm has many difficulties. Until there is an
+official solution, elm-fluent depends on the `elm-intl
 <https://github.com/vanwagonet/elm-intl/>`_ wrapping.
 
 Since this uses native/kernel modules, it can't be uploaded to
@@ -105,6 +106,19 @@ and dependency sources - this will be a new section if you haven't used
 This adds the ``elm-fluent`` package (a very small module provided by this
 project), and the ``elm-intl`` package (for now pointed at our fork of it which
 has a few bug fixes).
+
+Finally, run::
+
+  $ elm-install
+
+.. warning::
+
+   NOTE: by using ``elm-github-install`` and adding these dependencies, you are
+   opening yourself up to the problems that Javascript code brings - you are
+   essentially trusting these packages in the same way that you currently trust
+   Javascript from core Elm packages, rather than relying on the Elm compiler to
+   protect you from many issues that Javascript brings.
+
 
 Elm 0.19
 ~~~~~~~~

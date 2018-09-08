@@ -107,5 +107,9 @@ elm-stuff/
 
 tests/test_project/main.js
 tests/test_project/elm.js
-tests/test_project/Ftl/*
+
+Ftl/
+
+docs/tutorial_code/pre/*.js
+docs/tutorial_code/post/*.js
 

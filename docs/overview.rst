@@ -24,12 +24,13 @@ files.
    For Fluent, developers need to put localized text into ``.ftl`` files, so the full
    power of that language will be used. This includes:
 
-   * adding comments that will help translators
+   * choosing good message IDs, and being aware of the issues surrounding changes to
+     IDs or changes to text without changing IDs
+   * adding comments that will help translators - this is often vital to give context,
+     because a single English word could be interpreted as a noun or adjective or verb.
    * using Fluent constructs for things like variant selection, rather than using
      Elm flow control constructs for variant selection, which would cause the
      destination languages to suffer.
-   * choosing good message IDs, and being aware of the issues surrounding changes to
-     IDs or changes to text without changing IDs
 
 So, if your web app has a ‘notifications’ component with a title ‘Notifications’
 and some intro text, you would have a ``locales/en/notifications.ftl`` file that looks
@@ -68,7 +69,7 @@ take a locale value and a strongly typed record of substitution parameters, and
 return a string. (For advanced use cases, the functions return ``Html`` and take
 an additional parameter that allows attributes to be added to the HTML).
 
-.. admonition:: Justifcation
+.. admonition:: Justification
 
    Using a strongly typed record type means that we can catch the vast majority
    of errors at compile time. If a translator includes a parameter in their
@@ -84,5 +85,5 @@ locales directory and committed to VCS. (Mozilla has developed the `Pontoon
 <https://github.com/mozilla/pontoon>`_ system which provides a GUI for editing
 ``.ftl`` files, but elm-fluent doesn't have good integration with it yet).
 
-Finally, you can now compile the ``.ftl`` for all the languages, compile your
-Elm app and deploy.
+Finally, you can now compile the ``.ftl`` files for all the languages, compile
+your Elm app and deploy.

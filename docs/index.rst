@@ -8,6 +8,8 @@ Welcome to elm-fluent's documentation!
    overview
    installation
    tutorial
+   numbers
+   dates
    contributing
    authors
    history

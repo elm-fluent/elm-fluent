@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8"><title>Notifications</title>
+        <style>
+            th {
+              text-align: left;
+              font-weight: normal;
+              font-style: italic
+            }
+
+            tr.unread-message {
+              font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="notifications"></div>
+        <script src="notifications.js"></script>
+        <script>
+         var node = document.getElementById('notifications');
+         var app = Elm.Notifications.embed(node);
+        </script>
+    </body>
+</h1tml>

@@ -107,7 +107,7 @@ type FluentDate
     = FluentDate DateTimeFormat.Options Date.Date
 
 
-{-| Converts a Date into a FluentNumber
+{-| Converts a Date into a FluentDate
 -}
 date : Date.Date -> FluentDate
 date d =
