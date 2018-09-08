@@ -555,7 +555,7 @@ wide variety of contexts.
 HTML output
 ===========
 
-Although string output is the most flexible, there are time when you need HTML
+Although string output is the most flexible, there are times when you need HTML
 output.
 
 For example, we may simply want to highlight some text in some way. Suppose in our
@@ -602,9 +602,10 @@ Before we go on, there are a few things to note:
        , H.text ", so nice to have you back!"
        ]
 
-  You may notice that your code is now shorter and much more readable! This is
-  just a little bonus that comes from using a purpose-designed language like
-  FTL...
+  You may notice that your code, even when you add back in the FTL, is now
+  shorter and much more readable! This is just a little bonus that comes from
+  using a purpose-designed language like FTL, and a compiler (ftl2elm) that will
+  generate all that ``Html`` code for you...
 
 * elm-fluent can handle a lot more than this simple case — all the other Fluent
   features can be combined with HTML. This includes also being able to use
@@ -630,7 +631,8 @@ Before we go on, there are a few things to note:
 * You should consider carefully how much HTML you should put into your FTL
   files, and keep it as simple as possible. Remember it will be read and
   translated by translators who may not be experts in HTML. Use the mechanisms
-  described in the next section to keep as many HTML attributes in your
+  described in the next section to keep as many HTML attributes in your Elm code
+  as possible.
 
 Dynamic HTML output
 ===================
@@ -668,15 +670,15 @@ Elm code looks like this:
 
 We need the ``a`` elements to be embedded in translatable text (as discussed
 above — we don't want to split this text up). But we also need a way to attach
-those event handlers to the anchors (and we need to ensure we don't mix up those
-event handlers).
+those event handlers to the anchors, and we need to ensure we don't mix up those
+event handlers.
 
 (Also, we got lazy above and didn't handle the case of a single message very
-well - we'll fix that as we go).
+well — we'll fix that as we go).
 
 This is probably one of the most complex examples you'll come across, so the
-next section will be a little bit heavy. But if you can manage this you can
-manage anything.
+next section will be a little bit heavy. But if you can master this you have the
+tools to handle any similar situation.
 
 Let's start with a first attempt at our FTL message:
 
