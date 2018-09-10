@@ -24,7 +24,7 @@ Then install the latest version from PyPI using pip:
 
 .. code-block:: console
 
-   $ pip install elm_fluent
+   $ pip install elm-fluent
 
 An executable ``ftl2elm`` should have been added to your PATH, in your system
 ``bin`` or the virtualenv ``bin`` directory.
@@ -85,7 +85,7 @@ Quick version:
 Add the following dependencies to your elm-package.json::
 
     "dependencies": {
-        "thetalecrafter/elm-intl": "2.0.0 <= v < 3.0.0"
+        "thetalecrafter/elm-intl": "2.0.0 <= v < 3.0.0",
         "elm-fluent/elm-fluent": "1.0.0 <= v < 2.0.0"
     }
 
@@ -94,7 +94,7 @@ and dependency sources - this will be a new section if you haven't used
 
     "dependency-sources": {
         "thetalecrafter/elm-intl": {
-            "url": "https://github.com/elm-fluent/elm-intl",
+            "url": "https://github.com/vanwagonet/elm-intl",
             "ref": "master"
         },
         "elm-fluent/elm-fluent": {
@@ -104,8 +104,9 @@ and dependency sources - this will be a new section if you haven't used
     },
 
 This adds the ``elm-fluent`` package (a very small module provided by this
-project), and the ``elm-intl`` package (for now pointed at our fork of it which
-has a few bug fixes).
+project), and the ``elm-intl`` package. You should also check the
+[elm-intl](https://github.com/vanwagonet/elm-intl) installation notes for info
+regarding polyfills.
 
 Finally, run::
 
