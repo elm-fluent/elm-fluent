@@ -116,6 +116,8 @@ def run_compile(options):
         click.secho("\nErrors:\n", fg="red", bold=True)
         for ep in error_printers:
             ep()
+        if options.verbose:
+            click.secho("Failed!", fg="red", bold=True)
         raise click.Abort()
 
     if options.verbose:

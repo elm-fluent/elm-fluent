@@ -87,7 +87,7 @@ def main(
     )
 
     if watch:
-        run_compile(options)
+        run_compile_and_ignore_abort(options)
         observer = watchdog.observers.Observer()
         handler = RunCompileEventHandler(options)
         observer.schedule(handler, options.locales_dir, recursive=True)
@@ -102,9 +102,17 @@ def main(
         return run_compile(options)
 
 
+def run_compile_and_ignore_abort(options):
+    try:
+        run_compile(options)
+    except click.Abort:
+        pass
+
+
 class RunCompileEventHandler(watchdog.events.FileSystemEventHandler):
     def __init__(self, options):
         self.options = options
 
     def on_any_event(self, event):
-        run_compile(self.options)
+        click.secho("Changes detected, re-running...\n", fg="yellow")
+        run_compile_and_ignore_abort(self.options)
