@@ -3,9 +3,12 @@
 from __future__ import absolute_import, unicode_literals
 
 import os.path
+import time
 
 import attr
 import click
+import watchdog.observers
+import watchdog.events
 
 from .run import ErrorWhenMissing, FallbackToDefaultLocaleWhenMissing, run_compile
 
@@ -42,8 +45,16 @@ class CompilationOptions(object):
     default=True,
     help="Use BDI isolating characters",
 )
+@click.option(
+    "--watch/",
+    "watch",
+    flag_value=True,
+    help="Watch for changes and rebuild as necessary",
+)
 @click.option("--verbose/--quiet", default=False, help="More verbose output")
-def main(locales_dir, output_dir, when_missing, default_locale, bdi_isolating, verbose):
+def main(
+    locales_dir, output_dir, when_missing, default_locale, bdi_isolating, watch, verbose
+):
     locales_dir = os.path.normpath(os.path.abspath(locales_dir))
     if not os.path.exists(locales_dir) or not os.path.isdir(locales_dir):
         raise click.UsageError(
@@ -75,4 +86,25 @@ def main(locales_dir, output_dir, when_missing, default_locale, bdi_isolating, v
         verbose=verbose,
     )
 
-    return run_compile(options)
+    if watch:
+        run_compile(options)
+        observer = watchdog.observers.Observer()
+        handler = RunCompileEventHandler(options)
+        observer.schedule(handler, options.locales_dir, recursive=True)
+        observer.start()
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            observer.stop()
+        observer.join()
+    else:
+        return run_compile(options)
+
+
+class RunCompileEventHandler(watchdog.events.FileSystemEventHandler):
+    def __init__(self, options):
+        self.options = options
+
+    def on_any_event(self, event):
+        run_compile(self.options)

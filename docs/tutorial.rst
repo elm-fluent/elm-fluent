@@ -281,6 +281,9 @@ You'll hopefully see output like the following::
     Writing Ftl/Translations/Notifications.elm
     Success!
 
+(This tutorial won't mention running ``ftl2elm`` again - every time you change
+``.ftl`` files you'll need to run ``ftl2elm`` again - or, use the ``--watch``
+option and leave it running).
 
 Let's look at ``Ftl/EN/Notifications.elm``. This is a compilation of our
 ``notifications.ftl``, and it looks something like this (slightly abridged):
@@ -400,7 +403,6 @@ And we use it like this in our Elm code:
      -- (etc.)
      ]
 
-We'll need to run ``ftl2elm`` again. (TODO - ``--watch`` for ftl2elm to avoid this)
 
 Notice how we pass substitutions in a record type. The signature for
 ``notificationsGreeting`` looks like this:
