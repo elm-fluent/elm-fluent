@@ -314,9 +314,10 @@ class Module(Scope):
             for name, module in sorted(
                 self.import_dict.items(), key=lambda pair: pair[1].name
             ):
-                # We only support 'as' imports, to avoid name conflicts
-                # with functions defined in the module
-                lines.append("import {0} as {1}\n".format(module.name, name))
+                if self.import_is_used(name, module):
+                    # We only support 'as' imports, to avoid name conflicts
+                    # with functions defined in the module
+                    lines.append("import {0} as {1}\n".format(module.name, name))
             lines.append("\n")
 
         for s in self.sorted_statements():
@@ -327,6 +328,23 @@ class Module(Scope):
 
     def sorted_statements(self):
         return [s for i, s in sorted(self.statements.items(), key=lambda pair: pair[0])]
+
+    def import_is_used(self, local_name, module):
+        for node in traverse(self):
+            # Check for variable references
+            if isinstance(node, VariableReference):
+                if node.module_name == local_name:
+                    return True
+
+            # Check function signatures
+            if isinstance(node, Function):
+                function_type = node.type
+                if function_type is not None:
+                    for t in types.signature_traverse(function_type):
+                        if getattr(t, "module", None) == module:
+                            return True
+
+        return False
 
     def simplify(self, changes):
         self.statements = {i: s.simplify(changes) for i, s in self.statements.items()}
@@ -416,9 +434,8 @@ class Function(Scope, Statement):
         if self.parent_scope is None:
             signature = ""
         else:
-            try:
-                function_type = self.parent_scope.get_type(self.func_name)
-            except KeyError:
+            function_type = self.type
+            if function_type is None:
                 signature = ""
             else:
                 signature = "{name} : {signature}\n".format(

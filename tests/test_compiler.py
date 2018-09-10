@@ -1229,6 +1229,25 @@ class TestCompiler(unittest.TestCase):
             """,
         )
 
+    def test_imports_eliminated(self):
+        code, errs = compile_messages_to_elm(
+            """
+            test = Some text
+            """,
+            self.locale,
+            include_imports=True,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            import Intl.Locale as Locale
+
+            test : Locale.Locale -> a -> String
+            test locale_ args_ =
+                "Some text"
+            """,
+        )
+
 
 class TestHtml(unittest.TestCase):
     locale = "en-US"

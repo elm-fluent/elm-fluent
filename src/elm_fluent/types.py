@@ -81,6 +81,14 @@ class ElmType(object):
             )
         return self
 
+    def signature_sub_types(self):
+        """
+        Returns all the type objects that would appear in a signature
+        """
+        raise NotImplementedError(
+            "{0} needs to implement signature_sub_types".format(self.__class__)
+        )
+
 
 class UnconstrainedType(ElmType):
     def constrain(self, other):
@@ -95,6 +103,9 @@ class UnconstrainedType(ElmType):
             retval = six.unichr(max(map(ord, env.used_type_variables)) + 1)
         env.used_type_variables[retval] = self
         return retval
+
+    def signature_sub_types(self):
+        return []
 
 
 class TypeParam(UnconstrainedType):
@@ -212,6 +223,9 @@ class Type(ElmType):
             " " + type_paren_wrap(t.as_signature(from_module, env=env))
             for n, t in self.param_dict.items()
         )
+
+    def signature_sub_types(self):
+        return self.param_dict.values()
 
     def constrain(self, other):
         if isinstance(other, UnconstrainedType):
@@ -379,6 +393,9 @@ class Record(ElmType):
             else:
                 return "{ %s | %s }" % (base, fields_signature())
 
+    def signature_sub_types(self):
+        return self.fields.values()
+
 
 class Function(ElmType):
     def __init__(self, input_type, output_type):
@@ -425,6 +442,9 @@ class Function(ElmType):
             self.output_type.as_signature(from_module, env=env),
         )
 
+    def signature_sub_types(self):
+        return [self.input_type, self.output_type]
+
     def apply_args(self, args, from_ftl_source=None):
         """
         Returns that type that would remain after the supplied arguments
@@ -462,3 +482,11 @@ class DummyModule(object):
 
 
 dummy_module = DummyModule()
+
+
+def signature_traverse(type_obj):
+    sub_parts = type_obj.signature_sub_types()
+    for part in sub_parts:
+        for t in signature_traverse(part):
+            yield t
+    yield type_obj

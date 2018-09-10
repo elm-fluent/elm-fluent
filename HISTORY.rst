@@ -8,6 +8,7 @@ History
 * Better handling for a large variety of error conditions
 * Proper fallback mechanism implemented
 * Added ``--watch`` option.
+* Eliminate unused imports from generated code
 * Various bug fixes:
   * Avoid outputting ``.elm`` files with no exports
   * Bugs with HTML attributes and non-string message args
