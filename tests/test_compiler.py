@@ -1212,6 +1212,23 @@ class TestCompiler(unittest.TestCase):
             exceptions.CyclicReferenceError("Cyclic reference in cyclic-term-message"),
         )
 
+    def test_multiline_text(self):
+        code, errs = compile_messages_to_elm(
+            """
+            test = Some text
+                   that spans multiple lines
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            test : Locale.Locale -> a -> String
+            test locale_ args_ =
+                "Some text\\nthat spans multiple lines"
+            """,
+        )
+
 
 class TestHtml(unittest.TestCase):
     locale = "en-US"
@@ -1696,20 +1713,3 @@ class TestHtml(unittest.TestCase):
             """,
         )
         self.assertEqual(errs, [])
-
-    def test_multiline_text(self):
-        code, errs = compile_messages_to_elm(
-            """
-            test = Some text
-                   that spans multiple lines
-            """,
-            self.locale,
-        )
-        self.assertCodeEqual(
-            code,
-            """
-            test : Locale.Locale -> a -> String
-            test locale_ args_ =
-                "Some text\\nthat spans multiple lines"
-            """,
-        )
