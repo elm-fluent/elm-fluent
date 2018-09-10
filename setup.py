@@ -20,7 +20,7 @@ requirements = [
     "language-tags>=0.4.4",
     "beautifulsoup4>=4.6.3",
     "lxml>=4.2.4",
-    "watchdog>=0.9.0",
+    "watchdog>=0.8.3",
 ]
 
 if sys.version_info < (3, 4):
