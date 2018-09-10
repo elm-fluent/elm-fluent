@@ -69,9 +69,17 @@ class FallbackToDefaultLocaleWhenMissing(MissingTranslationStrategy):
             warnings.append(missing_file(filename, options))
 
     def missing_message(self, message_id, locale, errors, warnings):
+        if locale == self.fallback_locale:
+            extra = (
+                " This message will be omitted since it is not in the fallback locale."
+            )
+        else:
+            extra = ""
         warnings.append(
             exceptions.MissingMessage(
-                "Locale '{0}' - Message '{1}' missing".format(locale, message_id)
+                "Locale '{0}' - Message '{1}' missing.{2}".format(
+                    locale, message_id, extra
+                )
             )
         )
 

@@ -372,11 +372,19 @@ def compile_master(module_name, locales, locale_modules, message_mapping, option
                 branch.value = codegen.CompilationError()
             else:
                 branch.value = do_call(locale_to_use_for_message)
-        otherwise_branch = case_expr.add_branch(codegen.Otherwise())
-        otherwise_branch.value = do_call(options.default_locale)
 
-        function.body.value = case_expr
-        module.add_function(function_name, function)
+        if (
+            options.default_locale in locale_modules
+            and func_name in locale_modules[options.default_locale].exports
+        ):
+            otherwise_branch = case_expr.add_branch(codegen.Otherwise())
+            otherwise_branch.value = do_call(options.default_locale)
+            function.body.value = case_expr
+            module.add_function(function_name, function)
+        else:
+            # Can't add the function, the fallback is missing. We have already reported
+            # the error.
+            pass
 
     codegen.simplify(module)
     return (module, errors, warnings)

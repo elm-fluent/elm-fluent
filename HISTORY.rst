@@ -13,6 +13,7 @@ History
   * Avoid outputting ``.elm`` files with no exports
   * Bugs with HTML attributes and non-string message args
   * Crasher with multi-line messages
+  * Crasher when a message is missing from default locale
 
 
 0.1.0 (2018-07-27)
