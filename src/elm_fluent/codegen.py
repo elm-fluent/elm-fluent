@@ -478,7 +478,9 @@ class SourceCodeBuilder(object):
             self.current_line += indent
         if "\n" in part and part.find("\n") != len(part) - 1:
             raise ValueError(
-                "If you pass '\n' to add_part, it must be at the end of string value"
+                "If you pass '\n' to add_part, it must be at the end of string value. Received {0}".format(
+                    repr(part)
+                )
             )
         self.current_line += part
         if self.current_line.endswith("\n"):
@@ -727,8 +729,10 @@ class String(fixed_type("String"), Literal):
         return "<String {0}>".format(repr(self.string_value))
 
     def build_source(self, builder):
-        # TODO - escapes for some chars?
-        builder.add_part('"{0}"'.format(self.string_value.replace('"', '\\"')))
+        # TODO - escapes for other chars?
+        builder.add_part(
+            '"{0}"'.format(self.string_value.replace('"', '\\"').replace("\n", "\\n"))
+        )
 
 
 class Number(fixed_type("Number"), Literal):

@@ -1696,3 +1696,20 @@ class TestHtml(unittest.TestCase):
             """,
         )
         self.assertEqual(errs, [])
+
+    def test_multiline_text(self):
+        code, errs = compile_messages_to_elm(
+            """
+            test = Some text
+                   that spans multiple lines
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            test : Locale.Locale -> a -> String
+            test locale_ args_ =
+                "Some text\\nthat spans multiple lines"
+            """,
+        )
