@@ -2,8 +2,8 @@
 History
 =======
 
-0.2.0 (under development)
--------------------------
+0.2.0 (2018-09-10)
+------------------
 
 * Better handling for a large variety of error conditions
 * Proper fallback mechanism implemented
