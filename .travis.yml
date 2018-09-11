@@ -37,7 +37,8 @@ install:
       make && make install;
       cd ..;
     fi
-  - pip install -U tox-travis
+  - pip install -U tox-travis coverage codecov
   - npm install -g elm@0.18 elm-test@0.18 elm-github-install
 
 script: PATH=$PATH:$PWD/geckodriver tox
+after_success: coverage combine && codecov

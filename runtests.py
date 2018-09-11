@@ -7,6 +7,9 @@ import sys
 
 parser = argparse.ArgumentParser(description="Run the test suite, or some tests")
 parser.add_argument("--coverage", "-c", action="store_true", help="Run with 'coverage'")
+parser.add_argument(
+    "--coverage-parallel", action="store_true", help="Run coverage with --parallel"
+)
 parser.add_argument("--verbose", "-v", action="store_true")
 parser.add_argument(
     "--fast", "-f", action="store_true", help="Fast test run, skip end-to-end tests"
@@ -48,7 +51,10 @@ if args.show_browser:
     os.environ["TEST_SHOW_BROWSER"] = "1"
 
 if args.coverage:
-    cmd = ["-m", "coverage", "run"] + cmd
+    if args.coverage_parallel:
+        cmd = ["-m", "coverage", "run", "--parallel"] + cmd
+    else:
+        cmd = ["-m", "coverage", "run"] + cmd
 
 cmd.insert(0, "python")
 
