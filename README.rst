@@ -9,6 +9,9 @@ elm-fluent
 .. image:: https://img.shields.io/travis/elm-fluent/elm-fluent.svg
         :target: https://travis-ci.org/elm-fluent/elm-fluent
 
+.. image:: https://codecov.io/gh/elm-fluent/elm-fluent/branch/master/graph/badge.svg
+        :target: https://codecov.io/gh/elm-fluent/elm-fluent
+
 .. image:: https://readthedocs.org/projects/elm-fluent/badge/?version=latest
         :target: https://elm-fluent.readthedocs.io/en/latest/?badge=latest
         :alt: Documentation Status
