@@ -178,6 +178,13 @@ it is changed:
 And we need to include this somewhere in the page by adding it to the main
 ``view`` function (left as an exercise for you!).
 
+Also left as an exercise for you - if you change a page locale/language, you
+should always remember to `set the lang attribute
+<https://www.w3.org/International/questions/qa-html-language-declarations>`_ on
+the root ``<html>`` element, and you may want to update the document ``<title>``
+as well. You'll probably need to do both of these using a port (because
+typically these elements are outside of the root element that Elm controls).
+
 Extract localized text
 ======================
 
