@@ -127,3 +127,11 @@ Elm 0.19
 Elm 0.19 has added restrictions that make it harder to use third party packages
 with native code, so for the time being there is no easy way to install the
 required dependencies with Elm 0.19.
+
+Hopefully for Elm 0.19 we will have official ``Intl`` wrappers of some kind
+soon. It will probably not be too hard to adapt the elm-fluent compiler to
+depend on those libraries instead. This will likely mean some changes to user
+code, but possibly just types/imports.
+
+It is hoped that this project will provide feedback/prototyping that will help
+to shape a useful set of ``Intl`` wrappers for package.elm-lang.org.
