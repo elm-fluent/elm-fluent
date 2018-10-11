@@ -240,7 +240,8 @@ Notice:
    Fluent guide has `more information
    <https://projectfluent.org/fluent/guide/comments.html>`_.
 
-   For brevity we will omit comments for the rest of the messages we add.
+   For brevity this tutorial will omit comments for the rest of the messages we
+   add.
 
 2. The ``notification-`` prefix.
 
@@ -250,8 +251,7 @@ Notice:
 
    * If you want to combine FTL files at some point, it will help to avoid name
      clashes. You may also want to use the same FTL files with other
-     technologies (e.g. server side rendering with `django-ftl
-     <https://github.com/django-ftl/django-ftl>`_), and these technologies tend
+     technologies (e.g. server side rendering), and these technologies tend
      to use bundles that combine multiple ``.ftl`` files.
 
    * It will result in an Elm function that has a longer name, and so helps
@@ -625,9 +625,9 @@ Before we go on, there are a few things to note:
 
   .. code-block:: ftl
 
-    bad-message-1 = Some <{ $arg }>text</{ $arg }>
+    bad-message-1-html = Some <{ $arg }>text</{ $arg }>
 
-    bad-message-2 = Some <b { $arg }="value">text</b>
+    bad-message-2-html = Some <b { $arg }="value">text</b>
 
   There are also limitations with respect to Fluent's mechanism for `message
   references <https://projectfluent.org/fluent/guide/references.html>`_. You can
@@ -734,14 +734,22 @@ replace that final empty list with:
 
 Rebuild, and you'll find the two ``a`` elements at least appear as links.
 
-We now need to attach the event handlers. In most cases, we would only have a
-single link, so we could just add more attributes to the list above. But in this
-case we need to attach different handlers to the different elements, and they
-are both anchors. This means we will need to change the FTL message so that the
-two ``a`` elements can be distinguished somehow.
+We now need to attach the event handlers. In most cases, in a single piece of
+translatable text we would only have a single link or ‘active’ element that
+needs attributes, so we would just add more attributes to the list above — like
+this:
 
-To aid you in doing this, elm-fluent supports a subset of CSS selectors. The
-full list is:
+.. code-block:: elm
+
+   [ ( "a", [ A.href "#" ] )
+   , ( "[data-ftl-confirm]", [ onClickSimply DeleteConfirm ] )
+   ]
+
+But in this case we need to attach different handlers to the different elements,
+and they are both anchors. This means we will need to change the FTL message so
+that the two ``a`` elements can be distinguished somehow.
+
+To enable this, elm-fluent supports a subset of CSS selectors. The full list is:
 
 +-----------------------------------+-------------------------+
 | Type                              | Example                 |
@@ -803,7 +811,11 @@ Our Elm code becomes:
        , ( "[data-ftl-confirm]", [ onClickSimply DeleteConfirm ] )
        ]
 
-That's it! Let's just take stock of what we had to do:
+That's it! The generated code in ``notificationsDeleteConfirmPanelHtml`` takes
+care of adding the passed in attributes to the right nodes, so you get the same
+functionality as before.
+
+Let's just take stock of what we have to do for these cases:
 
 1. Pull out the text and the essential HTML structure into FTL.
 
@@ -813,7 +825,7 @@ That's it! Let's just take stock of what we had to do:
    function.
 
 3. If necessary, add some attributes to the HTML in the FTL file to disambiguate
-   the HTML nodes.
+   the HTML nodes, and adjust the CSS selectors accordingly.
 
 The result is that we have a clean separation of concerns. Our localized text is
 in one place, and it has the flexibility to structure the text and any embedded
@@ -821,7 +833,7 @@ HTML in any way necessary for the language. The text is actually much more
 succinct and readable than before.
 
 Our behavior is still all defined in Elm, though, where we want it. Admittedly
-it has become more dense, but we haven't had to re-organize our code very much.
+it has become more dense, but we've only had to make simple, local changes.
 
 .. note:: Performance
 
@@ -833,9 +845,9 @@ it has become more dense, but we haven't had to re-organize our code very much.
    selectors that each node can match. For example, if we have ``<a
    class="foo">`` in the FTL, the complete list is ``a``, ``.foo`` and
    ``a.foo``. The generated code for that node does a simple ``List.filter`` on
-   the passed in attributes to find the ones that apply to it. This is a little
-   bit more expensive than the original code, but there isn't any heavy lifting
-   going on at runtime.
+   the passed in attributes to find these 3 selectors. This is a little bit more
+   expensive than the original code, but there isn't any heavy lifting going on
+   at runtime.
 
 Final steps
 ===========
