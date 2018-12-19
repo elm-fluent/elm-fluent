@@ -15,7 +15,7 @@ with open("HISTORY.rst") as history_file:
 
 requirements = [
     "Click>=6.0",
-    "fluent>=0.8.0",
+    "fluent>=0.8.0,<0.9.0",
     "attrs>=18",
     "language-tags>=0.4.4",
     "beautifulsoup4>=4.6.3",
@@ -59,6 +59,6 @@ setup(
     setup_requires=setup_requirements,
     tests_require=test_requirements,
     url="https://github.com/elm-fluent/elm-fluent",
-    version="0.3.0-dev1",
+    version="0.2.1",
     zip_safe=False,
 )

@@ -5,6 +5,12 @@ History
 0.3.0 (under development)
 -------------------------
 
+0.2.1 (2018-12-19)
+------------------
+
+* Fixed python-fluent dependency to an older version (< 0.9), because it
+  doesn't work with newer versions. Thanks @stasm for the report.
+
 0.2.0 (2018-09-10)
 ------------------
 
