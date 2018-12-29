@@ -828,8 +828,10 @@ class Concat(Expression):
         List(self.parts).build_source(builder)
 
     def simplify(self, changes):
-        # Simplify sub parts
-        self.parts = [part.simplify(changes) for part in self.parts]
+        # Simplify sub parts (while eliminating empty)
+        self.parts = [
+            part.simplify(changes) for part in self.parts if not self.is_empty(part)
+        ]
 
         # Merge adjacent List(like) objects.
         new_parts = []
@@ -841,8 +843,7 @@ class Concat(Expression):
             ):
                 new_parts[-1] = self.merge_two(new_parts[-1], part)
             else:
-                if not self.is_empty(part):
-                    new_parts.append(part)
+                new_parts.append(part)
         if len(new_parts) < len(self.parts):
             changes.append(True)
         self.parts = new_parts

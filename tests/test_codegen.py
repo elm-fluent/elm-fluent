@@ -366,6 +366,34 @@ class TestCodeGen(unittest.TestCase):
             """,
         )
 
+    def test_string_join_omit_empty(self):
+        scope = codegen.Scope()
+        scope.reserve_name("tmp", type=dtypes.String)
+        var = scope.variables["tmp"]
+        join = codegen.StringConcat([codegen.String(""), var, var])
+        join = codegen.simplify(join)
+        self.assertCodeEqual(
+            join.as_source_code(),
+            """
+            String.concat [ tmp
+                          , tmp
+                          ]
+        """,
+        )
+
+    def test_string_join_omit_empty_2(self):
+        scope = codegen.Scope()
+        scope.reserve_name("tmp", type=dtypes.String)
+        var = scope.variables["tmp"]
+        join = codegen.StringConcat([codegen.String(""), var])
+        join = codegen.simplify(join)
+        self.assertCodeEqual(
+            join.as_source_code(),
+            """
+            tmp
+        """,
+        )
+
     def test_cleanup_name(self):
         for n, c in [
             ("abc-def()[]ghi,.<>¡!?¿", "abcdefghi"),  # illegal chars
