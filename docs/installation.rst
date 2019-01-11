@@ -104,9 +104,9 @@ and dependency sources - this will be a new section if you haven't used
     },
 
 This adds the ``elm-fluent`` package (a very small module provided by this
-project), and the ``elm-intl`` package. You should also check the
-[elm-intl](https://github.com/vanwagonet/elm-intl) installation notes for info
-regarding polyfills.
+project), and the ``elm-intl`` package. You should also check `elm-intl
+<https://github.com/vanwagonet/elm-intl>`_ installation notes for info regarding
+polyfills.
 
 Finally, run::
 

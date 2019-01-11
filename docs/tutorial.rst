@@ -93,7 +93,7 @@ We'll want a list of locales/languages we support, with some kind of caption:
        , ( "tr", "Turkçe" )
        ]
 
-Here we've used the localized name of the language as the caption - to make it
+Here we've used the localized name of the language as the caption. To make it
 easier for people to find their own language, and get back if they accidentally
 change the language to Chinese etc., we won't translate these depending on the
 user's choice of language. So this is one of the few times that we'll hard code
@@ -245,7 +245,7 @@ Notice:
 
 2. The ``notification-`` prefix.
 
-   This is used as an adhoc prefix to indicating the component/page this message
+   This is used as an adhoc prefix to indicate the component/page this message
    belongs to. This is not strictly necessary with elm-fluent, but has several
    advantages:
 
@@ -388,7 +388,7 @@ We can split this into two messages.
    Splitting of localized text has to be done very carefully. One of the key
    principles of translating apps is that **you cannot split a sentence or label
    into parts and translate the parts separately**. This might work for English,
-   but will fail for other things. Usually if you have several unrelated
+   but will fail for other languages. Usually if you have several unrelated
    sentences in a block of text, you can split them into a message for each
    sentence, but do not split up a sentence (or other text fragment like a
    title) further.
@@ -741,8 +741,8 @@ this:
 
 .. code-block:: elm
 
-   [ ( "a", [ A.href "#" ] )
-   , ( "[data-ftl-confirm]", [ onClickSimply DeleteConfirm ] )
+   [ ( "a", [ A.href "#"
+            , onClickSimply DeleteConfirm ] )
    ]
 
 But in this case we need to attach different handlers to the different elements,

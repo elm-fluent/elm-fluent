@@ -19,6 +19,7 @@ History
 * Added ``--watch`` option.
 * Eliminate unused imports from generated code
 * Various bug fixes:
+
   * Avoid outputting ``.elm`` files with no exports
   * Bugs with HTML attributes and non-string message args
   * Crasher with multi-line messages
