@@ -41,6 +41,9 @@ Please see the `docs
 <https://elm-fluent.readthedocs.io/en/latest/>`_ for more
 information.
 
+For discussion regarding Fluent, including elm-fluent, see also the `Mozilla
+Discourse Fluent category <https://discourse.mozilla.org/c/fluent>`_.
+
 Status
 ------
 
