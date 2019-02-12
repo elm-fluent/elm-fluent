@@ -656,7 +656,7 @@ confirmation panel that has hyperlinks like this:
     These 2 messages will be permanently deleted - **cancel** or **confirm**
 
 …except that 'cancel' and 'confirm' are hyperlinks with behavior attached. The
-Elm code looks like this:
+original Elm code looks like this:
 
 
   .. code-block:: elm
@@ -742,7 +742,8 @@ this:
 .. code-block:: elm
 
    [ ( "a", [ A.href "#"
-            , onClickSimply DeleteConfirm ] )
+            , onClickSimply DeleteConfirm
+            ] )
    ]
 
 But in this case we need to attach different handlers to the different elements,
