@@ -10,10 +10,18 @@ Stable release
 
 elm-fluent works primarily as a command line application that compiles ``.ftl``
 files to Elm code. This application is written in Python, and if you already have
-a Python installation (2.7 or 3.4+) you can easily install it as follows:
+a Python installation (2.7 or 3.4+) you can easily install it as follows.
 
-We recommend making a virtualenv for the installation to isolate it from your
-system Python:
+We recommend using `pipx <https://pypi.org/project/pipx/>`_ to allow you to
+install Python binaries in their own virtualenvs which are isolated from your
+system Python. With pipx installed, do:
+
+.. code-block:: console
+
+   pipx install elm-fluent
+
+
+Alternatively, you can manually create the virtualenv:
 
 .. code-block:: console
 

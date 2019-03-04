@@ -373,8 +373,9 @@ First message done! You can check your project compiles and works.
 Substitutions
 =============
 
-The next bit of our view consists of some complex bit of Elm code that generates
-text like the following:
+The next bit of our view consists of `some Elm code
+<https://github.com/elm-fluent/elm-fluent/blob/master/docs/tutorial_code/pre/Notifications.elm#L118>`_
+that generates text like the following:
 
 
     Hello, Mary. You have 2 unread messages.
@@ -532,7 +533,7 @@ can create an FTL message as follows:
 
 .. code-block:: ftl
 
-   notifications-search-box
+   notifications-search-box =
                            .placeholder = Search
                            .aria-label = Search through notifications
 
