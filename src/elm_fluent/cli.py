@@ -35,7 +35,7 @@ class CompilationOptions(object):
     "--when-missing",
     default="error",
     type=click.Choice(["error", "fallback"]),
-    help="What to do when translations are missing for a locale",
+    help="What to do when translations are missing for a locale, defaults to error",
 )
 @click.option(
     "--default-locale", default="en", help="The default locale, used for fallbacks"
