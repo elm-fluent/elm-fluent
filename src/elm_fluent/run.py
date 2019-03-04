@@ -362,8 +362,3 @@ def find_all_ftl_stems(locales_dir, locales):
         ]
         ftl_stems |= set(ftl_files)
     return sorted(list(ftl_stems))
-
-
-def compile_ftl_set(files):
-
-    pass
