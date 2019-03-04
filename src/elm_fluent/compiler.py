@@ -832,7 +832,7 @@ def compile_expr_variant_list(
         found = default
         if selected_key is not None:
             error = exceptions.ReferenceError(
-                "Unknown variant: {0}[{1}]".format(term_id, selected_key.name)
+                "Unknown variant: -{0}[{1}]".format(term_id, selected_key.name)
             )
             compiler_env.add_current_message_error(error, selected_key)
             return codegen.CompilationError()
@@ -840,7 +840,7 @@ def compile_expr_variant_list(
 
 
 def is_cldr_plural_form_key(key_expr):
-    return isinstance(key_expr, ast.VariantName) and key_expr.name in CLDR_PLURAL_FORMS
+    return isinstance(key_expr, ast.Identifier) and key_expr.name in CLDR_PLURAL_FORMS
 
 
 @compile_expr.register(ast.SelectExpression)
@@ -984,8 +984,8 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
         return case_expr
 
 
-@compile_expr.register(ast.VariantName)
-def compile_expr_variant_name(name, local_scope, compiler_env):
+@compile_expr.register(ast.Identifier)
+def compile_expr_identifier(name, local_scope, compiler_env):
     return codegen.String(name.name)
 
 
@@ -1004,12 +1004,12 @@ def compile_expr_variant_expression(variant_expr, local_scope, compiler_env):
             )
         else:
             error = exceptions.ReferenceError(
-                "Unknown variant: {0}[{1}]".format(term_id, variant_expr.key.name)
+                "Unknown variant: -{0}[{1}]".format(term_id, variant_expr.key.name)
             )
             compiler_env.add_current_message_error(error, variant_expr)
             return codegen.CompilationError()
     else:
-        error = exceptions.ReferenceError("Unknown term: {0}".format(term_id))
+        error = exceptions.ReferenceError("Unknown term: -{0}".format(term_id))
         compiler_env.add_current_message_error(error, variant_expr)
         return codegen.CompilationError()
 
@@ -1025,7 +1025,7 @@ def compile_expr_variable_reference(argument, local_scope, compiler_env):
 
 @compile_expr.register(ast.CallExpression)
 def compile_expr_call_expression(expr, local_scope, compiler_env):
-    function_name = expr.callee.name
+    function_name = expr.callee.id.name
 
     if function_name in compiler_env.functions:
         function_spec = compiler_env.functions[function_name]
