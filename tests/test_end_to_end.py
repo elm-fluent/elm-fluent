@@ -104,6 +104,9 @@ class TestEndToEnd(unittest.TestCase):
         self.assertIn("You have one new message", page_source)
         self.assertIn("You have 2 new messages", page_source)
 
+        # Parameterized terms
+        self.assertIn("We have the parameterized things", page_source)
+
         # Dates:
         self.assertIn("January 1, 1970 AD, 01:02:03", page_source)
 

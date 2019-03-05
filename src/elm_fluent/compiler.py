@@ -39,11 +39,11 @@ LOCALE_ARG_NAME = "locale_"
 ATTRS_ARG_NAME = "attrs_"
 ALL_MESSAGE_FUNCTION_ARGS = [LOCALE_ARG_NAME, MESSAGE_ARGS_NAME, ATTRS_ARG_NAME]
 
-
 PLURAL_FORM_FOR_NUMBER_NAME = "plural_form_for_number"
-
-
 CLDR_PLURAL_FORMS = set(["zero", "one", "two", "few", "many", "other"])
+
+TERM_SIGIL = "-"
+ATTRIBUTE_SEPARATOR = "."
 
 
 @attr.s
@@ -51,6 +51,7 @@ class CurrentEnvironment(object):
     # The parts of CompilerEnvironment that we want to mutate (and restore)
     # temporarily for some parts of a call chain.
     message_id = attr.ib(default=None)
+    term_args = attr.ib(default=None)
     html_context = attr.ib(default=False)
 
 
@@ -97,6 +98,9 @@ class CompilerEnvironment(object):
         yield self
         self.current = old_current
 
+    def modified_for_term_reference(self, term_args=None):
+        return self.modified(term_args=term_args if term_args is not None else {})
+
 
 def parse_ftl(source):
     resource = FluentParser().parse(source)
@@ -104,9 +108,9 @@ def parse_ftl(source):
     junk = []
     for item in resource.body:
         if isinstance(item, ast.Message):
-            messages[item.id.name] = item
+            messages[ast_to_id(item)] = item
         elif isinstance(item, ast.Term):
-            messages[item.id.name] = item
+            messages[ast_to_id(item)] = item
         elif isinstance(item, ast.Junk):
             junk.append(item)
     return messages, junk
@@ -133,7 +137,7 @@ def compile_messages(
         message_id_to_function_name_mapping
        )
 
-    elm_source is None if error_list is not empty.
+    elm_source will not be valid Elm source if error_list is not empty.
 
     The error list is itself a list of two tuples:
        (message id, exception object)
@@ -437,36 +441,22 @@ def function_type_for_func_name(func_name):
 
 def get_message_function_ast(message_dict):
     for msg_id, msg in message_dict.items():
-        if msg.value is None:
-            # No body, skip it.
-            pass
-        elif isinstance(msg, ast.Term):
-            pass
-        else:
+        if isinstance(msg, ast.Term):
+            continue
+        if msg.value is not None:  # has a body
             yield (msg_id, msg)
-        for msg_attr in msg.attributes:
-            yield (message_id_for_attr(msg_id, msg_attr.id.name), msg_attr)
+        for attribute in msg.attributes:
+            yield (attribute_ast_to_id(attribute, msg), attribute)
 
 
 def get_term_ast(message_dict):
     for term_id, term in message_dict.items():
-        if term.value is None:
-            # No body, skip it.
+        if isinstance(term, ast.Message):
             pass
-        elif isinstance(term, ast.Message):
-            pass
-        else:
+        if term.value is not None:  # has a body
             yield (term_id, term)
-        for term_attr in term.attributes:
-            yield (message_id_for_attr(term_id, term_attr.id.name), term_attr)
-
-
-def message_id_for_attr(parent_msg_id, attr_name):
-    return "{0}.{1}".format(parent_msg_id, attr_name)
-
-
-def message_id_for_attr_expression(attr_expr):
-    return message_id_for_attr(attr_expr.ref.id.name, attr_expr.name.name)
+        for attribute in term.attributes:
+            yield (attribute_ast_to_id(attribute, term), attribute)
 
 
 def message_function_name_for_msg_id(msg_id):
@@ -518,12 +508,8 @@ def get_processing_order(message_ids_to_ast):
             if not isinstance(node, ast.BaseNode):
                 return
 
-            if isinstance(node, ast.MessageReference):
-                ref = node.id.name
-                if ref in message_ids_to_ast:
-                    calls.append(ref)
-            elif isinstance(node, ast.AttributeExpression):
-                ref = message_id_for_attr_expression(node)
+            if isinstance(node, (ast.MessageReference, ast.AttributeExpression)):
+                ref = reference_to_id(node)
                 if ref in message_ids_to_ast:
                     calls.append(ref)
 
@@ -626,15 +612,15 @@ def contains_reference_cycle(msg, msg_id, compiler_env):
         # inlining), including the fallback strategies that are used.
         sub_node = None
         if isinstance(node, ast.MessageReference):
-            ref = node.id.name
+            ref = reference_to_id(node)
             if ref in message_ids_to_ast:
                 sub_node = message_ids_to_ast[ref]
         elif isinstance(node, ast.TermReference):
-            ref = node.id.name
+            ref = reference_to_id(node)
             if ref in term_ids_to_ast:
                 sub_node = term_ids_to_ast[ref]
         elif isinstance(node, ast.AttributeExpression):
-            ref = message_id_for_attr_expression(node)
+            ref = reference_to_id(node)
             if ref in message_ids_to_ast:
                 sub_node = message_ids_to_ast[ref]
             elif ref in term_ids_to_ast:
@@ -745,7 +731,14 @@ def compile_expr_placeable(placeable, local_scope, compiler_env):
 
 @compile_expr.register(ast.MessageReference)
 def compile_expr_message_reference(reference, local_scope, compiler_env):
-    name = reference.id.name
+    name = reference_to_id(reference)
+    if compiler_env.current.term_args is not None:
+        compiler_env.add_current_message_error(
+            exceptions.ReferenceError(
+                "Message '{0}' called from within a term".format(name)
+            ),
+            reference,
+        )
     try:
         return do_message_call(name, local_scope, reference, compiler_env)
     except exceptions.TypeMismatch as e:
@@ -755,14 +748,17 @@ def compile_expr_message_reference(reference, local_scope, compiler_env):
 
 @compile_expr.register(ast.TermReference)
 def compile_expr_term_reference(reference, local_scope, compiler_env):
-    name = reference.id.name
+    name = reference_to_id(reference)
     if name in compiler_env.term_ids_to_ast:
         term = compiler_env.term_ids_to_ast[name]
-        return compile_expr(term.value, local_scope, compiler_env)
+        return compile_term(term, local_scope, compiler_env)
     else:
-        error = exceptions.ReferenceError("Unknown term: {0}".format(name))
-        compiler_env.add_current_message_error(error, reference)
-        return codegen.CompilationError()
+        return unknown_reference(name, local_scope, reference, compiler_env)
+
+
+def compile_term(term, local_scope, compiler_env, term_args=None):
+    with compiler_env.modified_for_term_reference(term_args=term_args):
+        return compile_expr(term.value, local_scope, compiler_env)
 
 
 def do_message_call(name, local_scope, expr, compiler_env):
@@ -802,18 +798,18 @@ def unknown_reference(name, local_scope, expr, compiler_env):
 
 
 @compile_expr.register(ast.AttributeExpression)
-def compile_expr_attribute_expression(attribute, local_scope, compiler_env):
-    msg_id = message_id_for_attr_expression(attribute)
+def compile_expr_attribute_expression(attr_expr, local_scope, compiler_env):
+    msg_id = reference_to_id(attr_expr)
     # Message attribute
     if msg_id in compiler_env.message_mapping:
-        return do_message_call(msg_id, local_scope, attribute, compiler_env)
+        return do_message_call(msg_id, local_scope, attr_expr, compiler_env)
     # Term attribute
     elif msg_id in compiler_env.term_ids_to_ast:
         term = compiler_env.term_ids_to_ast[msg_id]
         return compile_expr(term, local_scope, compiler_env)
     # Missing
     else:
-        return unknown_reference(msg_id, local_scope, attribute, compiler_env)
+        return unknown_reference(msg_id, local_scope, attr_expr, compiler_env)
 
 
 @compile_expr.register(ast.VariantList)
@@ -832,7 +828,7 @@ def compile_expr_variant_list(
         found = default
         if selected_key is not None:
             error = exceptions.ReferenceError(
-                "Unknown variant: -{0}[{1}]".format(term_id, selected_key.name)
+                "Unknown variant: {0}[{1}]".format(term_id, selected_key.name)
             )
             compiler_env.add_current_message_error(error, selected_key)
             return codegen.CompilationError()
@@ -846,6 +842,12 @@ def is_cldr_plural_form_key(key_expr):
 @compile_expr.register(ast.SelectExpression)
 def compile_expr_select_expression(select_expr, local_scope, compiler_env):
     selector_value = compile_expr(select_expr.selector, local_scope, compiler_env)
+
+    static_retval = resolve_select_expression_statically(
+        select_expr, selector_value, local_scope, compiler_env
+    )
+    if static_retval is not None:
+        return static_retval
 
     numeric_variants = [
         variant
@@ -984,6 +986,66 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
         return case_expr
 
 
+def resolve_select_expression_statically(select_expr, key_ast, block, compiler_env):
+    """
+    Resolve a select expression statically, given a codegen.ElmAst object
+    `key_ast` representing the key value, or return None if not possible.
+    """
+    # We need to 'peek' inside what we've produce so far to see if it is something
+    # static. To do that reliably we must simplify at this point:
+    key_ast = codegen.simplify(key_ast)
+    key_is_default = isinstance(key_ast, Default)
+    key_is_number = isinstance(key_ast, codegen.Number) or (
+        is_NUMBER_function_call(key_ast) and isinstance(key_ast.args[0], codegen.Number)
+    )
+    key_is_string = isinstance(key_ast, codegen.String)
+    if not (key_is_string or key_is_number or key_is_default):
+        return None
+
+    if key_is_number:
+        if isinstance(key_ast, codegen.Number):
+            key_number_value = key_ast.number
+        else:
+            # peek into the number literal inside the `NUMBER` call.
+            key_number_value = key_ast.args[0].number
+
+    default_variant = None
+    found = None
+    non_numeric_variant_present = False
+
+    for variant in select_expr.variants:
+        if variant.default:
+            default_variant = variant
+            if key_is_default:
+                found = variant
+                break
+        if key_is_string:
+            if (
+                isinstance(variant.key, ast.Identifier)
+                and key_ast.string_value == variant.key.name
+            ):
+                found = variant
+                break
+        elif key_is_number:
+            if isinstance(
+                variant.key, ast.NumberLiteral
+            ) and key_number_value == numeric_to_native(variant.key.value):
+                found = variant
+                break
+            elif isinstance(variant.key, ast.Identifier):
+                # We would a plural category function to check, which we don't
+                # have at compile time, so bail out
+                non_numeric_variant_present = True
+
+    if found is None:
+        if non_numeric_variant_present:
+            return None
+        else:
+            found = default_variant
+
+    return compile_expr(found.value, block, compiler_env)
+
+
 @compile_expr.register(ast.Identifier)
 def compile_expr_identifier(name, local_scope, compiler_env):
     return codegen.String(name.name)
@@ -991,7 +1053,7 @@ def compile_expr_identifier(name, local_scope, compiler_env):
 
 @compile_expr.register(ast.VariantExpression)
 def compile_expr_variant_expression(variant_expr, local_scope, compiler_env):
-    term_id = variant_expr.ref.id.name
+    term_id = reference_to_id(variant_expr.ref)
     if term_id in compiler_env.term_ids_to_ast:
         term_val = compiler_env.term_ids_to_ast[term_id].value
         if isinstance(term_val, ast.VariantList):
@@ -1004,19 +1066,26 @@ def compile_expr_variant_expression(variant_expr, local_scope, compiler_env):
             )
         else:
             error = exceptions.ReferenceError(
-                "Unknown variant: -{0}[{1}]".format(term_id, variant_expr.key.name)
+                "Unknown variant: {0}[{1}]".format(term_id, variant_expr.key.name)
             )
             compiler_env.add_current_message_error(error, variant_expr)
             return codegen.CompilationError()
     else:
-        error = exceptions.ReferenceError("Unknown term: -{0}".format(term_id))
-        compiler_env.add_current_message_error(error, variant_expr)
-        return codegen.CompilationError()
+        return unknown_reference(term_id, local_scope, variant_expr, compiler_env)
 
 
 @compile_expr.register(ast.VariableReference)
 def compile_expr_variable_reference(argument, local_scope, compiler_env):
     name = argument.id.name
+
+    if compiler_env.current.term_args is not None:
+        # We are in a term, all args are passed explicitly, not inherited from
+        # external args.
+        if name in compiler_env.current.term_args:
+            return compiler_env.current.term_args[name]
+        return Default()
+
+    # Otherwise we are in a message, lookup at runtime
     # TODO - some kind of sanitising on the argument name
     args_var = local_scope.variables[MESSAGE_ARGS_NAME]
     arg = codegen.AttributeReference(args_var, name)
@@ -1025,15 +1094,35 @@ def compile_expr_variable_reference(argument, local_scope, compiler_env):
 
 @compile_expr.register(ast.CallExpression)
 def compile_expr_call_expression(expr, local_scope, compiler_env):
+    args = [compile_expr(arg, local_scope, compiler_env) for arg in expr.positional]
+    kwargs = {
+        kwarg.name.name: compile_expr(kwarg.value, local_scope, compiler_env)
+        for kwarg in expr.named
+    }
+
+    if isinstance(expr.callee, (ast.TermReference, ast.AttributeExpression)):
+        if args:
+            compiler_env.add_current_message_error(
+                exceptions.FunctionParameterError(
+                    "Positional arguments passed to term '{0}'".format(
+                        reference_to_id(expr.callee)
+                    )
+                ),
+                expr,
+            )
+            return codegen.CompilationError()
+
+        term_id = reference_to_id(expr.callee)
+        if term_id in compiler_env.term_ids_to_ast:
+            term = compiler_env.term_ids_to_ast[term_id]
+            return compile_term(term, local_scope, compiler_env, term_args=kwargs)
+        else:
+            return unknown_reference(term_id, local_scope, expr, compiler_env)
+
     function_name = expr.callee.id.name
 
     if function_name in compiler_env.functions:
         function_spec = compiler_env.functions[function_name]
-        args = [compile_expr(arg, local_scope, compiler_env) for arg in expr.positional]
-        kwargs = {
-            kwarg.name.name: compile_expr(kwarg.value, local_scope, compiler_env)
-            for kwarg in expr.named
-        }
         match, error = args_match(function_spec, args, kwargs)
         if match:
             try:
@@ -1109,6 +1198,9 @@ class Stringable(codegen.Expression):
         self._finalized_expr = None
         self._assigned_types = []
 
+    def __repr__(self):
+        return "Stringable({!r})".format(self.expr)
+
     @property
     def type(self):
         return dtypes.String
@@ -1163,6 +1255,15 @@ class Stringable(codegen.Expression):
     def simplify(self, changes):
         assert self._finalized_expr is not None, "Need to call 'finalize' first"
         return self._finalized_expr.simplify(changes)
+
+
+class Default(codegen.Expression):
+    """
+    Sentinel object for selecting default value in variant list
+    """
+
+    def sub_expressions(self):
+        return []
 
 
 # --- FTL syntax utils ---
@@ -1391,3 +1492,54 @@ DateTimeFunction = DateTimeFunction()
 NumberFunction = NumberFunction()
 
 FUNCTIONS = {f.name: f for f in [DateTimeFunction, NumberFunction]}
+
+
+def is_NUMBER_function_call(codegen_ast):
+    return (
+        isinstance(codegen_ast, codegen.FunctionCall)
+        and codegen_ast.function_name == NumberFunction.name
+    )
+
+
+# Other utils
+
+
+def reference_to_id(ref):
+    """
+    Returns a string reference for a MessageReference, TermReference or AttributeExpression
+    AST node.
+
+    e.g.
+       message
+       message.attr
+       -term
+       -term.attr
+    """
+    if isinstance(ref, ast.AttributeExpression):
+        return _make_attr_id(reference_to_id(ref.ref), ref.name.name)
+    if isinstance(ref, ast.TermReference):
+        return TERM_SIGIL + ref.id.name
+    return ref.id.name
+
+
+def ast_to_id(ast_obj):
+    """
+    Returns a string reference for a Term or Message
+    """
+    if isinstance(ast_obj, ast.Term):
+        return TERM_SIGIL + ast_obj.id.name
+    return ast_obj.id.name
+
+
+def attribute_ast_to_id(attribute, parent_ast):
+    """
+    Returns a string reference for an Attribute, given Attribute and parent Term or Message
+    """
+    return _make_attr_id(ast_to_id(parent_ast), attribute.id.name)
+
+
+def _make_attr_id(parent_ref_id, attr_name):
+    """
+    Given a parent id and the attribute name, return the attribute id
+    """
+    return "".join([parent_ref_id, ATTRIBUTE_SEPARATOR, attr_name])

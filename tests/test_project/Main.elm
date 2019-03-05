@@ -156,6 +156,8 @@ view model =
             , H.p [] [ H.text <| T.messageWithMixedNumericSelect locale { count = Fluent.number 0 } ]
             , H.p [] [ H.text <| T.messageWithMixedNumericSelect locale { count = Fluent.number 1 } ]
             , H.p [] [ H.text <| T.messageWithMixedNumericSelect locale { count = Fluent.number 2 } ]
+            , H.h2 [] [ H.text <| T.parameterizedTermsTestsTitle locale () ]
+            , H.p [] [ H.text <| T.messageWithParameterizedThing locale () ]
             , H.h2 [] [ H.text <| T.dateTestsSectionTitle locale () ]
             , H.p []
                 [ H.text <|

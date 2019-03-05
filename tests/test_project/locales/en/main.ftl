@@ -42,6 +42,22 @@ date-tests-section-title = Dates tests
 
 here-is-a-date = Here is a formatted date: { DATETIME($mydate, day: "numeric", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit", second:"2-digit", hour12: 0, era:"short") }
 
+parameterized-terms-tests-title = Parameterized terms
+
+-parameterized-thing = { $article ->
+                  *[indefinite] { $count ->
+                                       [one]    a parameterized thing
+                                      *[other]  some parameterized things
+                                }
+                   [definite]   { $count ->
+                                       [one]   the parameterized thing
+                                      *[other] the parameterized things
+                                }
+ }
+
+message-with-parameterized-thing = We have { -parameterized-thing(article: "definite", count: 7) }
+
+
 html-tests-section-title = HTML tests
 
 simple-text-html = Some text with this &amp; that.

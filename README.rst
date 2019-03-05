@@ -26,7 +26,7 @@ solution (used by apps like Firefox and Thunderbird) into a re-usable
 specification designed specifically for the web.
 
 elm-fluent is a full implementation of this specification for Elm (currently
-supporting the Fluent 0.6 syntax).
+supporting the Fluent 0.8 syntax).
 
 It operates as a command line tool that compiles ``.ftl`` files to ``.elm``
 files. The result is that each message becomes a function that will generate a
@@ -50,7 +50,7 @@ Status
 * Rough around the edges, but usable. Please see the list of `open issues
   <https://github.com/elm-fluent/elm-fluent/issues>`_.
 * A pretty complete test suite.
-* Compatibility: Elm 0.18 only at the moment. Fluent 0.6 syntax.
+* Compatibility: Elm 0.18 only at the moment. Fluent 0.8 syntax.
 * Free software: MIT license
 
 Credits

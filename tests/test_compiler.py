@@ -830,6 +830,7 @@ class TestCompiler(unittest.TestCase):
         """,
             self.locale,
         )
+        self.assertEqual(errs, [])
         self.assertCodeEqual(
             code,
             """
@@ -974,6 +975,26 @@ class TestCompiler(unittest.TestCase):
         )
         self.assertEqual(errs, [])
 
+    def test_select_number_literal(self):
+        code, errs = compile_messages_to_elm(
+            """
+            foo = { 1 ->
+                [1] One
+               *[2] Two
+             }
+        """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "One"
+            """,
+        )
+        self.assertEqual(errs, [])
+
     def test_select_plural_categories(self):
         code, errs = compile_messages_to_elm(
             """
@@ -1027,7 +1048,7 @@ class TestCompiler(unittest.TestCase):
         """,
         )
 
-    def test_select_mismtatch(self):
+    def test_select_mismatch(self):
         src = dedent_ftl(
             """
             foo = { 1 ->
@@ -1247,6 +1268,154 @@ class TestCompiler(unittest.TestCase):
                 "Some text"
             """,
         )
+
+    def test_parameterized_terms_strings(self):
+        code, errs = compile_messages_to_elm(
+            """
+            -thing = { $article ->
+                  *[definite] the thing
+                   [indefinite] a thing
+                   [none] thing
+            }
+            thing-no-arg = { -thing }
+            thing-no-arg-alt = { -thing() }
+            thing-with-arg = { -thing(article: "indefinite") }
+            thing-fallback = { -thing(article: "somethingelse") }
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            thingNoArg : Locale.Locale -> a -> String
+            thingNoArg locale_ args_ =
+                "the thing"
+
+            thingNoArgAlt : Locale.Locale -> a -> String
+            thingNoArgAlt locale_ args_ =
+                "the thing"
+
+            thingWithArg : Locale.Locale -> a -> String
+            thingWithArg locale_ args_ =
+                "a thing"
+
+            thingFallback : Locale.Locale -> a -> String
+            thingFallback locale_ args_ =
+                "the thing"
+            """,
+        )
+        self.assertEqual(errs, [])
+
+    def test_parameterized_terms_numbers(self):
+        code, errs = compile_messages_to_elm(
+            """
+            -thing = { $count ->
+                  *[1] one thing
+                   [2] two things
+            }
+            thing-no-arg = { -thing }
+            thing-no-arg-alt = { -thing() }
+            thing-one = { -thing(count: 1) }
+            thing-two = { -thing(count: 2) }
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            thingNoArg : Locale.Locale -> a -> String
+            thingNoArg locale_ args_ =
+                "one thing"
+
+            thingNoArgAlt : Locale.Locale -> a -> String
+            thingNoArgAlt locale_ args_ =
+                "one thing"
+
+            thingOne : Locale.Locale -> a -> String
+            thingOne locale_ args_ =
+                "one thing"
+
+            thingTwo : Locale.Locale -> a -> String
+            thingTwo locale_ args_ =
+                "two things"
+            """,
+        )
+
+    def test_parameterized_terms_missing(self):
+        code, errs = compile_messages_to_elm(
+            """
+            bad-term = { -missing(foo: "bar") }
+            """,
+            self.locale,
+        )
+        self.assertEqual(errs, [exceptions.ReferenceError("Unknown term: -missing")])
+        self.assertEqual(errs[0].error_sources[0].message_id, "bad-term")
+
+    def test_parameterized_terms_positional_arg(self):
+        code, errs = compile_messages_to_elm(
+            """
+            -thing = { $article ->
+                  *[definite] the thing
+                   [indefinite] a thing
+            }
+            thing-positional-arg = { -thing("bar") }
+            """,
+            self.locale,
+        )
+        self.assertEqual(
+            errs,
+            [
+                exceptions.FunctionParameterError(
+                    "Positional arguments passed to term '-thing'"
+                )
+            ],
+        )
+        self.assertEqual(errs[0].error_sources[0].message_id, "thing-positional-arg")
+
+    def test_parameterized_term_attributes(self):
+        code, errs = compile_messages_to_elm(
+            """
+            -brand = Cool Thing
+                .status = { $version ->
+                    [v2]     available
+                   *[v1]     deprecated
+                }
+
+            attr-with-arg = { -brand } is { -brand.status(version: "v2") ->
+                 [available]   available, yay!
+                *[deprecated]  deprecated, sorry
+            }
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            attrWithArg : Locale.Locale -> a -> String
+            attrWithArg locale_ args_ =
+                "Cool Thing is available, yay!"
+            """,
+        )
+
+    def test_messages_called_from_terms(self):
+        code, errs = compile_messages_to_elm(
+            """
+            msg = Msg is { NUMBER($arg) }
+            -foo = { msg }
+            ref-foo = { -foo(arg: 1) }
+            """,
+            self.locale,
+        )
+        # This construct is technically allowed at the moment, but might be
+        # disallowed in future, and it doesn't make a huge amount of sense,
+        # so we disallow for now.
+        self.assertEqual(
+            errs, [exceptions.ReferenceError("Message 'msg' called from within a term")]
+        )
+        self.assertEqual(errs[0].error_sources[0].message_id, "ref-foo")
+
+    # TODO - ideally it should be an error to passing args to terms that are not expecting those args.
+    #  This could prevent typos
 
 
 class TestHtml(unittest.TestCase):
