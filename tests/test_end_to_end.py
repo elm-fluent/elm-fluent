@@ -27,6 +27,7 @@ def noisy_check_call(cmd):
 class TestEndToEnd(unittest.TestCase):
 
     visible = os.environ.get("TEST_SHOW_BROWSER", "0") == "1"
+    use_network = os.environ.get("TEST_NO_NETWORK", "0") != "1"
 
     @classmethod
     def setUpClass(cls):
@@ -58,7 +59,8 @@ class TestEndToEnd(unittest.TestCase):
         # Check the script in installed as expected
         noisy_check_call(["ftl2elm", "--when-missing=fallback", "--no-bdi-isolating"])
 
-        noisy_check_call(["elm-install"])
+        if self.use_network:
+            noisy_check_call(["elm-install"])
         elm_make_cmd = ["elm-make", "--yes", "Main.elm", "--output=main.js"]
         if "TRAVIS_BUILD_DIR" in os.environ:
             # See https://github.com/elm/compiler/issues/1473#issuecomment-245704142

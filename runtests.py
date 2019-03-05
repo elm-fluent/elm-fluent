@@ -15,6 +15,12 @@ parser.add_argument(
     "--fast", "-f", action="store_true", help="Fast test run, skip end-to-end tests"
 )
 parser.add_argument(
+    "--no-network",
+    "-n",
+    action="store_true",
+    help="Skip network access (requires stuff has been fetched in previous run)",
+)
+parser.add_argument(
     "--show-browser", action="store_true", help="Don't hide web browser"
 )
 parser.add_argument(
@@ -49,6 +55,9 @@ if args.fast:
 
 if args.show_browser:
     os.environ["TEST_SHOW_BROWSER"] = "1"
+
+if args.no_network:
+    os.environ["TEST_NO_NETWORK"] = "1"
 
 if args.coverage:
     if args.coverage_parallel:
