@@ -1103,7 +1103,7 @@ def compile_expr_call_expression(expr, local_scope, compiler_env):
     if isinstance(expr.callee, (ast.TermReference, ast.AttributeExpression)):
         if args:
             compiler_env.add_current_message_error(
-                exceptions.FunctionParameterError(
+                exceptions.TermParameterError(
                     "Positional arguments passed to term '{0}'".format(
                         reference_to_id(expr.callee)
                     )
@@ -1115,6 +1115,34 @@ def compile_expr_call_expression(expr, local_scope, compiler_env):
         term_id = reference_to_id(expr.callee)
         if term_id in compiler_env.term_ids_to_ast:
             term = compiler_env.term_ids_to_ast[term_id]
+            used_variables = get_term_used_variables(term, compiler_env)
+            bad_kwarg = False
+            for kwarg_name in kwargs:
+                if kwarg_name not in used_variables:
+                    bad_kwarg = True
+                    if len(used_variables) > 0:
+                        compiler_env.add_current_message_error(
+                            exceptions.TermParameterError(
+                                "Parameter '{0}' was passed to term '{1}' which does not take this parameter. Did you mean: {2}?".format(
+                                    kwarg_name,
+                                    term_id,
+                                    ", ".join(sorted(used_variables)),
+                                )
+                            ),
+                            expr,
+                        )
+                    else:
+                        compiler_env.add_current_message_error(
+                            exceptions.TermParameterError(
+                                "Parameter '{0}' was passed to term '{1}' which does not take parameters.".format(
+                                    kwarg_name, term_id
+                                )
+                            ),
+                            expr,
+                        )
+            if bad_kwarg:
+                return codegen.CompilationError()
+
             return compile_term(term, local_scope, compiler_env, term_args=kwargs)
         else:
             return unknown_reference(term_id, local_scope, expr, compiler_env)
@@ -1543,3 +1571,29 @@ def _make_attr_id(parent_ref_id, attr_name):
     Given a parent id and the attribute name, return the attribute id
     """
     return "".join([parent_ref_id, ATTRIBUTE_SEPARATOR, attr_name])
+
+
+def get_term_used_variables(term, compiler_env):
+    found_variables = []
+    term_ids_to_ast = compiler_env.term_ids_to_ast
+
+    # We only traverse TermReferences, not MessageReferences, because we
+    # currently don't support calling messages from terms.
+    def finder(node):
+        sub_node = None
+        if isinstance(node, ast.VariableReference):
+            found_variables.append(node.id.name)
+        elif isinstance(node, ast.TermReference):
+            ref = reference_to_id(node)
+            if ref in term_ids_to_ast:
+                sub_node = term_ids_to_ast[ref]
+        elif isinstance(node, ast.AttributeExpression):
+            ref = reference_to_id(node)
+            if ref in term_ids_to_ast:
+                sub_node = term_ids_to_ast[ref]
+
+        if sub_node is not None:
+            traverse_ast(sub_node, finder)
+
+    traverse_ast(term, finder)
+    return sorted(set(found_variables))

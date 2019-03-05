@@ -67,3 +67,7 @@ class HtmlTypeMismatch(FluentError):
 
 class FunctionParameterError(FluentError):
     pass
+
+
+class TermParameterError(FluentError):
+    pass

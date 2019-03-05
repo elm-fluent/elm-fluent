@@ -1365,7 +1365,7 @@ class TestCompiler(unittest.TestCase):
         self.assertEqual(
             errs,
             [
-                exceptions.FunctionParameterError(
+                exceptions.TermParameterError(
                     "Positional arguments passed to term '-thing'"
                 )
             ],
@@ -1397,11 +1397,40 @@ class TestCompiler(unittest.TestCase):
             """,
         )
 
+    def test_superfluous_or_bad_parameters(self):
+        code, errs = compile_messages_to_elm(
+            """
+            -term = My Thing
+            message = { -term(foo: "bar") }
+            -parameterized-term = { $foo ->
+                    *[a]   A
+                     [b]   { -other-term }
+             }
+            -other-term = { $bar ->
+                    *[c]   C
+                     [d]   D
+             }
+            message-2 = { -parameterized-term(fooo: "bar") }
+            """,
+            self.locale,
+        )
+        self.assertEqual(
+            errs,
+            [
+                exceptions.TermParameterError(
+                    "Parameter 'foo' was passed to term '-term' which does not take parameters."
+                ),
+                exceptions.TermParameterError(
+                    "Parameter 'fooo' was passed to term '-parameterized-term' which does not take this parameter. Did you mean: bar, foo?"
+                ),
+            ],
+        )
+
     def test_messages_called_from_terms(self):
         code, errs = compile_messages_to_elm(
             """
             msg = Msg is { NUMBER($arg) }
-            -foo = { msg }
+            -foo = { $arg } { msg }
             ref-foo = { -foo(arg: 1) }
             """,
             self.locale,
@@ -1413,9 +1442,6 @@ class TestCompiler(unittest.TestCase):
             errs, [exceptions.ReferenceError("Message 'msg' called from within a term")]
         )
         self.assertEqual(errs[0].error_sources[0].message_id, "ref-foo")
-
-    # TODO - ideally it should be an error to passing args to terms that are not expecting those args.
-    #  This could prevent typos
 
 
 class TestHtml(unittest.TestCase):
