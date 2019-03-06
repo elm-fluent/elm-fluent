@@ -47,7 +47,7 @@ class CompilationOptions(object):
     help="Use BDI isolating characters",
 )
 @click.option(
-    "--watch/",
+    "--watch",
     "watch",
     flag_value=True,
     help="Watch for changes and rebuild as necessary",
