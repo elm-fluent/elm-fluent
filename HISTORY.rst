@@ -5,6 +5,9 @@ History
 0.3.0 (under development)
 -------------------------
 
+* Syntax 0.8 support, including parameterized terms.
+* Better compile-time resolution of some expressions.
+
 0.2.1 (2018-12-19)
 ------------------
 
