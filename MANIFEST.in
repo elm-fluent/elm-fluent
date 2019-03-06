@@ -10,13 +10,13 @@ include tox.ini
 include requirements_dev.txt
 include *.json
 include *.yaml
-
+include *.rst
 
 recursive-include src *
 recursive-include tests *.py *.elm *.ftl *.html *.json
 recursive-include .github *
 recursive-include elm_src *.elm
-recursive-include docs *.rst conf.py Makefile make.bat *.jpg *.png *.gif
+recursive-include docs *.rst conf.py Makefile make.bat *.jpg *.png *.gif *.elm *.ftl *.html *.json
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
@@ -26,3 +26,6 @@ prune src/elm-stuff
 prune tests/test_project/elm-stuff
 prune tests/test_project/Ftl
 prune docs/_build
+prune docs/tutorial_code/pre/elm-stuff
+prune docs/tutorial_code/post/elm-stuff
+prune docs/tutorial_code/post/Ftl

@@ -3,6 +3,7 @@ Stub to define types for the Fluent module
 """
 from __future__ import absolute_import, unicode_literals
 
+from .. import codegen, types
 from . import (
     date,
     defaults as dtypes,
@@ -11,7 +12,6 @@ from . import (
     intl_locale,
     intl_numberformat,
 )
-from .. import codegen, types
 
 module = codegen.Module(name="Fluent")
 

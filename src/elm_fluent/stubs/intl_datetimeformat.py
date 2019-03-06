@@ -3,8 +3,8 @@ Stub to define types for the Intl.DateTimeFormat module
 """
 from __future__ import absolute_import, unicode_literals
 
-from . import defaults as dtypes, intl_locale, intl_timezone
 from .. import codegen, types
+from . import defaults as dtypes, intl_locale, intl_timezone
 
 module = codegen.Module(name="Intl.DateTimeFormat")
 

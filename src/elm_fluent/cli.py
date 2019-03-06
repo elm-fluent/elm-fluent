@@ -7,8 +7,8 @@ import time
 
 import attr
 import click
-import watchdog.observers
 import watchdog.events
+import watchdog.observers
 
 from .run import ErrorWhenMissing, FallbackToDefaultLocaleWhenMissing, run_compile
 
