@@ -59,6 +59,6 @@ setup(
     setup_requires=setup_requirements,
     tests_require=test_requirements,
     url="https://github.com/elm-fluent/elm-fluent",
-    version="0.3",
+    version="0.4.0.dev1",
     zip_safe=False,
 )
