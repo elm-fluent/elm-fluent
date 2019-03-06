@@ -2,8 +2,8 @@
 History
 =======
 
-0.3.0 (under development)
--------------------------
+0.3.0 (2019-03-06)
+------------------
 
 * Syntax 0.8 support, including parameterized terms.
 * Better compile-time resolution of some expressions.
