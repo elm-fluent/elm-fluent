@@ -15,7 +15,7 @@ with open("HISTORY.rst") as history_file:
 
 requirements = [
     "Click>=6.0",
-    "fluent.syntax>=0.12.0,<0.13.0",
+    "fluent.syntax>=0.10.0,<0.13.0",
     "attrs>=18",
     "language-tags>=0.4.4",
     "beautifulsoup4>=4.6.3",
