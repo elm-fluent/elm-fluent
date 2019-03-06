@@ -1,7 +1,7 @@
 Release process
 ===============
 
-* Tests, including flake8, black and check-manifest
+* Tests, including flake8, black, isort and check-manifest
 
 * Update HISTORY.rst, removing "(in development)". Commit.
 
