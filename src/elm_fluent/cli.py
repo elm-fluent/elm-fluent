@@ -10,6 +10,7 @@ import click
 import watchdog.events
 import watchdog.observers
 
+from . import __version__
 from .run import ErrorWhenMissing, FallbackToDefaultLocaleWhenMissing, run_compile
 
 
@@ -52,9 +53,21 @@ class CompilationOptions(object):
     help="Watch for changes and rebuild as necessary",
 )
 @click.option("--verbose/--quiet", default=False, help="More verbose output")
+@click.option("--version", "version", flag_value=True, help="Print version and exit")
 def main(
-    locales_dir, output_dir, when_missing, default_locale, bdi_isolating, watch, verbose
+    locales_dir,
+    output_dir,
+    when_missing,
+    default_locale,
+    bdi_isolating,
+    watch,
+    verbose,
+    version,
 ):
+    if version:
+        click.echo("elm-fluent {0}".format(__version__))
+        return
+
     locales_dir = os.path.normpath(os.path.abspath(locales_dir))
     if not os.path.exists(locales_dir) or not os.path.isdir(locales_dir):
         raise click.UsageError(
