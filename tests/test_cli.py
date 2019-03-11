@@ -155,8 +155,7 @@ class TestFileSelection(StandardLayoutMixin, unittest.TestCase):
         result = self.run_main(['--include', '**/foo.ftl'])
         self.assertEqual(result.output.strip(), '')
         self.assertEqual(sorted(self.get_all_files(self.output_fs).keys()),
-                         [
-                             '/Ftl/EN/Foo.elm',
-                             '/Ftl/Translations/Foo.elm'
-                         ])
+                         ['/Ftl/EN/Foo.elm',
+                          '/Ftl/Translations/Foo.elm'
+                          ])
         self.assertEqual(result.exit_code, 0)

@@ -203,11 +203,9 @@ class Type(ElmType):
         return self._is_compatible(other) and (self.param_dict == other.param_dict)
 
     def _is_compatible(self, other):
-        return (
-            isinstance(other, Type)
-            and (self.module == other.module)
-            and (self.name == other.name)
-        )
+        return (isinstance(other, Type)
+                and (self.module == other.module)
+                and (self.name == other.name))
 
     def __str__(self):
         return self.as_signature(dummy_module)
@@ -408,11 +406,9 @@ class Function(ElmType):
         return "<Function: {0}>".format(self.as_signature(dummy_module))
 
     def __eq__(self, other):
-        return (
-            isinstance(other, Function)
-            and (self.input_type == other.input_type)
-            and (self.output_type == other.output_type)
-        )
+        return (isinstance(other, Function)
+                and (self.input_type == other.input_type)
+                and (self.output_type == other.output_type))
 
     def constrain(self, other):
         assert isinstance(other, Function), "Expecting {0} to be a Function".format(
