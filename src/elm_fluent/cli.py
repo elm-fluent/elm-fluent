@@ -46,7 +46,10 @@ def get_output_fs(path):
     default="locales",
     help="Location of the locales directory that holds all FTL files.",
 )
-@click.option("--output-dir", default=".", help="Location of the outputted Elm files.")
+@click.option(
+    "--output-dir",
+    default=".",
+    help="Location of the outputted Elm files.")
 @click.option(
     "--when-missing",
     default="error",
