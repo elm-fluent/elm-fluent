@@ -28,6 +28,17 @@ class CompilationOptions(object):
     verbose = attr.ib(default=False)
 
 
+# These functions exist so that we can patch them out when testing. There
+# doesn't seem to be a way to pass other extra kwargs to 'main' function
+# below.
+def get_locales_fs(path):
+    return OSFS(path)
+
+
+def get_output_fs(path):
+    return OSFS(path)
+
+
 @click.command()
 @click.option(
     "--locales-dir",
@@ -65,24 +76,20 @@ def main(locales_dir,
          watch,
          verbose,
          version,
-         locales_fs=None,
-         output_fs=None,
          ):
     if version:
         click.echo("elm-fluent {0}".format(__version__))
         return
 
-    if locales_fs is None:
-        if os.path.isabs(locales_dir):
-            locales_fs = OSFS('/')
-        else:
-            locales_fs = OSFS('.')
+    if os.path.isabs(locales_dir):
+        locales_fs = get_locales_fs('/')
+    else:
+        locales_fs = get_locales_fs('.')
 
-    if output_fs is None:
-        if os.path.isabs(output_dir):
-            output_fs = OSFS('/')
-        else:
-            output_fs = OSFS('.')
+    if os.path.isabs(output_dir):
+        output_fs = get_output_fs('/')
+    else:
+        output_fs = get_output_fs('.')
 
     if not locales_fs.exists(locales_dir) or not locales_fs.isdir(locales_dir):
         raise click.UsageError(
