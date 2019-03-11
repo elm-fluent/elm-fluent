@@ -1,6 +1,5 @@
 repos:
--   repo: https://github.com/ambv/black
-    rev: stable
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: master
     hooks:
-    - id: black
-      language_version: python3.6
+    - id: flake8
