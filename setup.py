@@ -28,9 +28,14 @@ if sys.version_info < (3, 4):
     # functools.singledispatch is in stdlib from Python 3.4 onwards.
     requirements.append("singledispatch>=3.4")
 
-setup_requirements = []
-
-test_requirements = []
+# It would be nice to inline requirements_dev.txt here, add:
+#    extras_require={
+#        'develop': test_requirements,
+#    },
+# and then in tox.ini we could do '.[develop]' as a requirement.
+# Unfortunately, 'pip install' from a directory is super slow:
+#  https://github.com/pypa/pip/issues/2195
+test_requirements = open("requirements_dev.txt").read().split("\n")
 
 setup(
     author="Luke Plant",
@@ -57,8 +62,7 @@ setup(
     name="elm_fluent",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
-    setup_requires=setup_requirements,
-    tests_require=test_requirements,
+    tests_require=test_requirements,  # for setup.py test
     url="https://github.com/elm-fluent/elm-fluent",
     version="0.4.0.dev1",
     zip_safe=False,
