@@ -14,6 +14,8 @@ from elm_fluent import cli
 
 from .utils import dedent_ftl
 
+dedent_source = dedent_ftl
+
 
 class TestHelp(unittest.TestCase):
     def test_help(self):
@@ -41,11 +43,9 @@ class StandardLayoutMixin(object):
         self.locales_fs_patcher = mock.patch('elm_fluent.cli.get_locales_fs',
                                              new=get_locales_fs)
         self.locales_fs_patcher.start()
-
         self.output_fs_patcher = mock.patch('elm_fluent.cli.get_output_fs',
                                             new=get_output_fs)
         self.output_fs_patcher.start()
-
         self.setup_fs()
 
     def tearDown(self):
@@ -60,9 +60,50 @@ class StandardLayoutMixin(object):
     def write_ftl_file(self, path, contents):
         self.locales_fs.writetext(path, dedent_ftl(contents))
 
+    def assertFileSystemEquals(self, fs, files):
+        all_files = {p: fs.readtext(p) for p in fs.walk.files()}
+        self.assertEqual({p: c.rstrip() for p, c in all_files.items()},
+                         {p: c.rstrip() for p, c in files.items()})
+
     def run_main(self, args=None):
         return self.runner.invoke(cli.main,
                                   args=[] if args is None else args)
+
+
+class TestCreate(StandardLayoutMixin, unittest.TestCase):
+    maxDiff = None
+
+    def test_simple(self):
+        self.write_ftl_file("locales/en/foo.ftl", """
+            foo = Foo
+        """)
+        result = self.run_main()
+        self.assertEqual(result.output.strip(), "")
+        self.assertFileSystemEquals(self.output_fs, {
+            '/Ftl/EN/Foo.elm': dedent_source('''
+            module Ftl.EN.Foo exposing (foo)
+
+            import Intl.Locale as Locale
+
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                "Foo"
+            '''),
+            '/Ftl/Translations/Foo.elm': dedent_source('''
+            module Ftl.Translations.Foo exposing (foo)
+
+            import Ftl.EN.Foo as EN
+            import Intl.Locale as Locale
+
+            foo : Locale.Locale -> a -> String
+            foo locale_ args_ =
+                case String.toLower (Locale.toLanguageTag locale_) of
+                    "en" ->
+                        EN.foo locale_ args_
+                    _ ->
+                        EN.foo locale_ args_
+            '''),
+        })
 
 
 class TestErrors(StandardLayoutMixin, unittest.TestCase):
@@ -84,3 +125,4 @@ locales/en/foo.ftl:3:23: In message 'foo': FluentDate is not compatible with Flu
     locales/en/foo.ftl:3:23: Inferred type: FluentDate
 Aborted!
 """.strip())
+        self.assertFileSystemEquals(self.output_fs, {})
