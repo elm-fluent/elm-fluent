@@ -9,19 +9,22 @@ import attr
 import click
 import watchdog.events
 import watchdog.observers
+from fs.osfs import OSFS
 
 from . import __version__
 from .run import ErrorWhenMissing, FallbackToDefaultLocaleWhenMissing, run_compile
+from .utils import normpath
 
 
 @attr.s
 class CompilationOptions(object):
+    locales_fs = attr.ib()
+    output_fs = attr.ib()
     locales_dir = attr.ib()
     output_dir = attr.ib()
     default_locale = attr.ib()
     missing_translation_strategy = attr.ib()
     use_isolating = attr.ib()
-    cwd = attr.ib()
     verbose = attr.ib(default=False)
 
 
@@ -54,29 +57,40 @@ class CompilationOptions(object):
 )
 @click.option("--verbose/--quiet", default=False, help="More verbose output")
 @click.option("--version", "version", flag_value=True, help="Print version and exit")
-def main(
-    locales_dir,
-    output_dir,
-    when_missing,
-    default_locale,
-    bdi_isolating,
-    watch,
-    verbose,
-    version,
-):
+def main(locales_dir,
+         output_dir,
+         when_missing,
+         default_locale,
+         bdi_isolating,
+         watch,
+         verbose,
+         version,
+         locales_fs=None,
+         output_fs=None,
+         ):
     if version:
         click.echo("elm-fluent {0}".format(__version__))
         return
 
-    locales_dir = os.path.normpath(os.path.abspath(locales_dir))
-    if not os.path.exists(locales_dir) or not os.path.isdir(locales_dir):
+    if locales_fs is None:
+        if os.path.isabs(locales_dir):
+            locales_fs = OSFS('/')
+        else:
+            locales_fs = OSFS('.')
+
+    if output_fs is None:
+        if os.path.isabs(output_dir):
+            output_fs = OSFS('/')
+        else:
+            output_fs = OSFS('.')
+
+    if not locales_fs.exists(locales_dir) or not locales_fs.isdir(locales_dir):
         raise click.UsageError(
             "Locales directory '{0}' does not exist. Please specify a correct locales "
             "directory using the --locales-dir option".format(locales_dir)
         )
 
-    output_dir = os.path.normpath(os.path.abspath(output_dir))
-    if not os.path.exists(output_dir) or not os.path.isdir(output_dir):
+    if not output_fs.exists(output_dir) or not output_fs.isdir(output_dir):
         raise click.UsageError(
             "Output directory '{0}' does not exist. Please specify a correct output "
             "directory using the --output-dir option".format(output_dir)
@@ -90,12 +104,13 @@ def main(
         )
 
     options = CompilationOptions(
+        locales_fs=locales_fs,
+        output_fs=output_fs,
         locales_dir=locales_dir,
         output_dir=output_dir,
         default_locale=default_locale,
         missing_translation_strategy=missing_translation_strategy,
         use_isolating=bdi_isolating,
-        cwd=os.getcwd(),
         verbose=verbose,
     )
 
@@ -103,7 +118,8 @@ def main(
         run_compile_and_ignore_abort(options)
         observer = watchdog.observers.Observer()
         handler = RunCompileEventHandler(options)
-        observer.schedule(handler, options.locales_dir, recursive=True)
+        observer.schedule(handler, normpath(options.locales_fs, options.locales_dir),
+                          recursive=True)
         observer.start()
         try:
             while True:

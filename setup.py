@@ -21,6 +21,7 @@ requirements = [
     "beautifulsoup4>=4.6.3",
     "lxml>=4.2.4",
     "watchdog>=0.8.3",
+    "fs>=2.4.2",
 ]
 
 if sys.version_info < (3, 4):

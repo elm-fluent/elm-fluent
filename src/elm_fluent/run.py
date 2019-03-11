@@ -1,6 +1,5 @@
 from __future__ import absolute_import, print_function, unicode_literals
 
-import os
 import os.path
 
 import click
@@ -14,6 +13,7 @@ from .compiler import (
     span_to_position,
 )
 from .stubs import defaults as dtypes
+from .utils import normpath
 
 
 class MissingTranslationStrategy(object):
@@ -29,7 +29,7 @@ class MissingTranslationStrategy(object):
 
 def missing_file(filename, options):
     return exceptions.MissingMessageFile(
-        "Message file '{0}' not found".format(os.path.relpath(filename, options.cwd))
+        "Message file '{0}' not found".format(filename)
     )
 
 
@@ -85,22 +85,20 @@ class FallbackToDefaultLocaleWhenMissing(MissingTranslationStrategy):
 
 
 def run_compile(options):
-    locales = find_locales(options.locales_dir)
+    locales = find_locales(options.locales_fs, options.locales_dir)
     if not locales:
         raise click.UsageError(
-            "No locale directories (directories containing .ftl files) found in {0} directory".format(
-                options.locales_dir
-            )
+            "No locale directories (directories containing .ftl files) found in {0} directory"
+            .format(normpath(options.locales_fs, options.locales_dir))
         )
     bad_locales = [l for l in locales if not language_tags.tags.check(l)]
     if bad_locales:
         raise click.UsageError(
-            "The following directory names are not valid BCP 47 language tags: {0}".format(
-                ", ".join(bad_locales)
-            )
+            "The following directory names are not valid BCP 47 language tags: {0}"
+            .format(", ".join(bad_locales))
         )
 
-    stems = find_all_ftl_stems(options.locales_dir, locales)
+    stems = find_all_ftl_stems(options.locales_fs, options.locales_dir, locales)
     finalizers = []
     error_printers = []
     warning_printers = []
@@ -140,6 +138,8 @@ def run_compile(options):
 def generate_elm_for_stem(options, locales, stem):
     errors = []
     warnings = []
+    locales_fs = options.locales_fs
+    output_fs = options.output_fs
 
     sources = {}
     locale_modules = {}
@@ -148,8 +148,8 @@ def generate_elm_for_stem(options, locales, stem):
     for locale in locales:
         filename = os.path.join(options.locales_dir, locale, stem)
         module_name = module_name_for_stem(stem, locale=locale)
-        if os.path.exists(filename):
-            with open(filename, "rb") as f:
+        if locales_fs.exists(filename):
+            with locales_fs.open(filename, "rb") as f:
                 messages_string = f.read().decode("utf-8")
             sources[filename] = messages_string
             module, compile_errors, message_mapping = compile_messages(
@@ -204,12 +204,12 @@ def generate_elm_for_stem(options, locales, stem):
                     # module, and `exposing ()` is also invalid syntax, so we
                     # must avoid writing it
                     source = module.as_source_code()
-                    ensure_path_dirs(fname)
+                    ensure_path_dirs(output_fs, fname)
                     if options.verbose:
                         click.echo(
-                            "Writing {0}".format(os.path.relpath(fname, options.cwd))
+                            "Writing {0}".format(fname)
                         )
-                    with open(fname, "wb") as f:
+                    with output_fs.open(fname, "wb") as f:
                         f.write(source.encode("utf-8"))
 
     def error_printer():
@@ -234,11 +234,10 @@ def print_errors(options, errors, sources):
                 row, col = span_to_position(
                     error_source.expr.span, sources[source_filename]
                 )
-                short_filename = os.path.relpath(source_filename, options.cwd)
                 if error_source.message_id is not None:
                     click.echo(
                         "{0}:{1}:{2}: In message '{3}': {4}".format(
-                            short_filename,
+                            source_filename,
                             row,
                             col,
                             error_source.message_id,
@@ -247,7 +246,7 @@ def print_errors(options, errors, sources):
                     )
                 else:
                     click.echo(
-                        "{0}:{1}:{2}: {3}".format(short_filename, row, col, err.args[0])
+                        "{0}:{1}:{2}: {3}".format(source_filename, row, col, err.args[0])
                     )
         else:
             if hasattr(err, "message_func_name"):
@@ -270,13 +269,12 @@ def print_errors(options, errors, sources):
                 click.echo("  Compare the following:")
                 for type_source in type_sources:
                     t_source_filename = type_source.ftl_source.message_source
-                    t_short_filename = os.path.relpath(t_source_filename, options.cwd)
                     row, col = span_to_position(
                         type_source.ftl_source.expr.span, sources[t_source_filename]
                     )
                     click.echo(
                         "    {0}:{1}:{2}: Inferred type: {3}".format(
-                            t_short_filename, row, col, type_source.type_obj
+                            t_source_filename, row, col, type_source.type_obj
                         )
                     )
 
@@ -285,9 +283,7 @@ def print_errors(options, errors, sources):
                     for type_source in type_sources
                 ):
                     click.echo("")
-                    click.echo(
-                        "  Hint: You may need to use NUMBER() or DATETIME() builtins to force the correct type"
-                    )
+                    click.echo("  Hint: You may need to use NUMBER() or DATETIME() builtins to force the correct type")
 
 
 def print_warnings(warnings):
@@ -295,10 +291,10 @@ def print_warnings(warnings):
         click.echo(warning.args[0])
 
 
-def ensure_path_dirs(path):
+def ensure_path_dirs(fs, path):
     dirname = os.path.dirname(path)
-    if not os.path.exists(dirname):
-        os.makedirs(dirname)
+    if not fs.exists(dirname):
+        fs.makedirs(dirname)
 
 
 def module_name_for_stem(ftl_stem, locale=None, master=False):
@@ -322,25 +318,24 @@ def path_for_module(options, module_name):
     return os.path.join(options.output_dir, module_name.replace(".", "/") + ".elm")
 
 
-def find_locales(locales_dir):
+def find_locales(locales_fs, locales_dir):
     return [
-        d for d in os.listdir(locales_dir) if contains_ftl(os.path.join(locales_dir, d))
+        d.name for d in locales_fs.scandir(locales_dir)
+        if d.is_dir and contains_ftl(locales_fs.opendir(locales_dir).opendir(d.name))
     ]
 
 
-def contains_ftl(directory):
-    if not os.path.isdir(directory):
-        return False
+def contains_ftl(fs):
     return any(
-        is_ftl(f) for dirpath, dirnames, files in os.walk(directory) for f in files
+        is_ftl(f) for step in fs.walk('.') for f in step.files
     )
 
 
-def is_ftl(path):
-    return path.endswith(".ftl") and not os.path.basename(path).startswith(".")
+def is_ftl(fs_file):
+    return fs_file.name.endswith(".ftl") and not fs_file.name.startswith(".")
 
 
-def find_all_ftl_stems(locales_dir, locales):
+def find_all_ftl_stems(locales_fs, locales_dir, locales):
     """
     Given a locales directory and a list of locales, finds all the
     ftl stem names. For example, for these files:
@@ -352,12 +347,11 @@ def find_all_ftl_stems(locales_dir, locales):
     """
     ftl_stems = set([])
     for l in locales:
-        locale_base_dir = os.path.join(locales_dir, l)
-        stem_offset = len(locale_base_dir) + 1
+        locale_base_fs = locales_fs.opendir(os.path.join(locales_dir, l))
         ftl_files = [
-            os.path.join(dirpath, f)[stem_offset:]
-            for dirpath, dirnames, files in os.walk(locale_base_dir)
-            for f in files
+            os.path.join(step.path, f.name).lstrip('/')
+            for step in locale_base_fs.walk('.')
+            for f in step.files
             if is_ftl(f)
         ]
         ftl_stems |= set(ftl_files)
