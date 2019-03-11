@@ -22,6 +22,7 @@ class CompilationOptions(object):
     output_fs = attr.ib()
     locales_dir = attr.ib()
     output_dir = attr.ib()
+    include = attr.ib()
     default_locale = attr.ib()
     missing_translation_strategy = attr.ib()
     use_isolating = attr.ib()
@@ -56,6 +57,9 @@ def get_output_fs(path):
     "--default-locale", default="en", help="The default locale, used for fallbacks"
 )
 @click.option(
+    "--include", default="**/*.ftl", help="Glob pattern for the FTL files to include"
+)
+@click.option(
     "--bdi-isolating/--no-bdi-isolating",
     default=True,
     help="Use BDI isolating characters",
@@ -72,6 +76,7 @@ def main(locales_dir,
          output_dir,
          when_missing,
          default_locale,
+         include,
          bdi_isolating,
          watch,
          verbose,
@@ -115,6 +120,7 @@ def main(locales_dir,
         output_fs=output_fs,
         locales_dir=locales_dir,
         output_dir=output_dir,
+        include=include,
         default_locale=default_locale,
         missing_translation_strategy=missing_translation_strategy,
         use_isolating=bdi_isolating,

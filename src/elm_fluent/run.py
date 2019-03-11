@@ -85,7 +85,7 @@ class FallbackToDefaultLocaleWhenMissing(MissingTranslationStrategy):
 
 
 def run_compile(options):
-    locales = find_locales(options.locales_fs, options.locales_dir)
+    locales = find_locales(options.locales_fs, options.locales_dir, options.include)
     if not locales:
         raise click.UsageError(
             "No locale directories (directories containing .ftl files) found in {0} directory"
@@ -98,7 +98,7 @@ def run_compile(options):
             .format(", ".join(bad_locales))
         )
 
-    stems = find_all_ftl_stems(options.locales_fs, options.locales_dir, locales)
+    stems = find_all_ftl_stems(options.locales_fs, options.locales_dir, options.include, locales)
     finalizers = []
     error_printers = []
     warning_printers = []
@@ -318,24 +318,25 @@ def path_for_module(options, module_name):
     return os.path.join(options.output_dir, module_name.replace(".", "/") + ".elm")
 
 
-def find_locales(locales_fs, locales_dir):
+def find_locales(locales_fs, locales_dir, include_glob):
     return [
         d.name for d in locales_fs.scandir(locales_dir)
-        if d.is_dir and contains_ftl(locales_fs.opendir(locales_dir).opendir(d.name))
+        if d.is_dir and contains_ftl(locales_fs.opendir(locales_dir).opendir(d.name), include_glob)
     ]
 
 
-def contains_ftl(fs):
+def contains_ftl(fs, include_glob):
     return any(
-        is_ftl(f) for step in fs.walk('.') for f in step.files
+        is_ftl(m.path) for m in fs.glob(include_glob)
     )
 
 
-def is_ftl(fs_file):
-    return fs_file.name.endswith(".ftl") and not fs_file.name.startswith(".")
+def is_ftl(filepath):
+    basename = os.path.basename(filepath)
+    return basename.endswith(".ftl") and not basename.startswith(".")
 
 
-def find_all_ftl_stems(locales_fs, locales_dir, locales):
+def find_all_ftl_stems(locales_fs, locales_dir, include_glob, locales):
     """
     Given a locales directory and a list of locales, finds all the
     ftl stem names. For example, for these files:
@@ -349,10 +350,9 @@ def find_all_ftl_stems(locales_fs, locales_dir, locales):
     for l in locales:
         locale_base_fs = locales_fs.opendir(os.path.join(locales_dir, l))
         ftl_files = [
-            os.path.join(step.path, f.name).lstrip('/')
-            for step in locale_base_fs.walk('.')
-            for f in step.files
-            if is_ftl(f)
+            m.path.lstrip('/')
+            for m in locale_base_fs.glob(include_glob)
+            if is_ftl(m.path)
         ]
         ftl_stems |= set(ftl_files)
     return sorted(list(ftl_stems))

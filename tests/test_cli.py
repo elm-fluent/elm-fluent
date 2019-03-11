@@ -60,8 +60,11 @@ class StandardLayoutMixin(object):
     def write_ftl_file(self, path, contents):
         self.locales_fs.writetext(path, dedent_ftl(contents))
 
+    def get_all_files(self, fs):
+        return {p: fs.readtext(p) for p in fs.walk.files()}
+
     def assertFileSystemEquals(self, fs, files):
-        all_files = {p: fs.readtext(p) for p in fs.walk.files()}
+        all_files = self.get_all_files(fs)
         self.assertEqual({p: c.rstrip() for p, c in all_files.items()},
                          {p: c.rstrip() for p, c in files.items()})
 
@@ -126,3 +129,34 @@ locales/en/foo.ftl:3:23: In message 'foo': FluentDate is not compatible with Flu
 Aborted!
 """.strip())
         self.assertFileSystemEquals(self.output_fs, {})
+
+
+class TestFileSelection(StandardLayoutMixin, unittest.TestCase):
+
+    def setUp(self):
+        super(TestFileSelection, self).setUp()
+        self.write_ftl_file("locales/en/foo.ftl", """
+            foo = Foo
+        """)
+        self.write_ftl_file("locales/en/error.ftl", """
+            error =  { -not-a-term }
+        """)
+
+    def test_include_default(self):
+        """
+        Test that by default all files get included
+        """
+        result = self.run_main()
+        self.assertEqual(result.exit_code, 1)
+        self.assertFileSystemEquals(self.output_fs, {})
+        self.assertIn('Unknown term: -not-a-term', result.output)
+
+    def test_include_glob(self):
+        result = self.run_main(['--include', '**/foo.ftl'])
+        self.assertEqual(result.output.strip(), '')
+        self.assertEqual(sorted(self.get_all_files(self.output_fs).keys()),
+                         [
+                             '/Ftl/EN/Foo.elm',
+                             '/Ftl/Translations/Foo.elm'
+                         ])
+        self.assertEqual(result.exit_code, 0)
