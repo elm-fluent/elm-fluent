@@ -5,7 +5,7 @@ History
 0.4.0 (under development)
 -------------------------
 * ftl2elm --include option
-
+* Dropped Python 2.7 support
 
 0.3.0 (2019-03-06)
 ------------------
