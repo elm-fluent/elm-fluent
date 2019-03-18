@@ -2,8 +2,8 @@
 History
 =======
 
-0.4.0 (under development)
--------------------------
+0.4.0 (2019-03-18)
+------------------
 * ftl2elm --include option
 * Dropped Python 2.7 support
 

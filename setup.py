@@ -62,6 +62,6 @@ setup(
     package_dir={"": "src"},
     tests_require=test_requirements,  # for setup.py test
     url="https://github.com/elm-fluent/elm-fluent",
-    version="0.4.0.dev1",
+    version="0.4.0",
     zip_safe=False,
 )
