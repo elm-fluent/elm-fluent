@@ -1,8 +1,6 @@
 """
 HTML specific compilation functions
 """
-from __future__ import absolute_import, unicode_literals
-
 import re
 
 import bs4

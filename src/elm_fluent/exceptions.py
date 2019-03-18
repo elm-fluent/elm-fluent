@@ -1,6 +1,3 @@
-from __future__ import absolute_import, unicode_literals
-
-
 class FluentError(ValueError):
     def __init__(self, *args):
         super(FluentError, self).__init__(*args)
@@ -51,14 +48,10 @@ class TypeMismatch(FluentError):
 
 
 class RecordTypeMismatch(TypeMismatch):
-    # Python 2.7 compatible kwarg syntax
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, record_type=None, field_name=None):
         super(RecordTypeMismatch, self).__init__(*args)
-        self.record_type = kwargs.pop("record_type", None)
-        self.field_name = kwargs.pop("field_name", None)
-        assert not kwargs, "Unexpected keyword args {0}".format(
-            ", ".join(kwargs.keys())
-        )
+        self.record_type = record_type
+        self.field_name = field_name
 
 
 class HtmlTypeMismatch(FluentError):
