@@ -47,10 +47,31 @@ Discourse Fluent category <https://discourse.mozilla.org/c/fluent>`_.
 Status
 ------
 
-* Rough around the edges, but usable. Please see the list of `open issues
+* Rough around the edges, but being used in production. Please see the list of `open issues
   <https://github.com/elm-fluent/elm-fluent/issues>`_.
-* A pretty complete test suite.
-* Compatibility: Elm 0.18 only at the moment. Fluent 0.8 syntax.
+* A pretty complete test suite and sufficient docs.
+* Compatibility: Elm 0.18 only.
+
+  Elm 0.19 is problematic - we require a wrapper for `Intl
+  <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl>`_,
+  but Elm doesn't have one yet and the restriction on native modules blocks us
+  from writing our own.
+
+  It is unclear if/when an official wrapper will be provided, or whether it will
+  be suitable for elm-fluent. We use `elm-intl
+  <https://github.com/vanwagonet/elm-intl>`_ which has proved ideal for our
+  usage, but the core team apparently `quickly dismissed
+  <https://discourse.elm-lang.org/t/state-of-localization-l10n-and-v0-19/1541/18>`_
+  adoption of a library like that.
+
+  In light of this, and other problems caused by the restriction on native
+  modules in 0.19, the author of elm-fluent may well be forced to move away from
+  Elm. In this event the most likely outcome is a migration to `Reason
+  <https://reasonml.github.io/>`_ + `bucklescript
+  <https://bucklescript.github.io/>`_ and elm-fluent will be forked to target
+  that platform instead. This repo will not be deleted but further development
+  will likely stop.
+
 * Free software: MIT license
 
 Credits
