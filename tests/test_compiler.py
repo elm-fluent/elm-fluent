@@ -113,6 +113,19 @@ class TestCompiler(unittest.TestCase):
         )
         self.assertEqual(errs, [])
 
+    def test_escapes(self):
+        code, errs = compile_messages_to_elm(r"""
+            escapes = {"    "}stuff{"\u0258}\"\\end"}
+        """, self.locale)
+        self.assertCodeEqual(
+            code,
+            r"""
+            escapes : Locale.Locale -> a -> String
+            escapes locale_ args_ =
+                "    stuffɘ}\"\end"
+            """,
+        )
+
     def test_number_literal(self):
         code, errs = compile_messages_to_elm(
             """

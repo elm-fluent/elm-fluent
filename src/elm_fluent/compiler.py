@@ -733,7 +733,7 @@ def compile_expr_text(text, local_scope, compiler_env):
 
 @compile_expr.register(ast.StringLiteral)
 def compile_expr_string_expression(expr, local_scope, compiler_env):
-    return codegen.String(expr.value)
+    return codegen.String(expr.parse()['value'])
 
 
 @compile_expr.register(ast.NumberLiteral)
