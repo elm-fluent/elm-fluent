@@ -151,6 +151,41 @@ While trying to compile master 'foo' function:
 Aborted!
         """.strip())
 
+    def test_multiple_type_errors_different_files(self):
+        self.write_ftl_file("locales/en/foo.ftl", """
+            foo = message with number { NUMBER($arg) }
+        """)
+        self.write_ftl_file("locales/tr/foo.ftl", """
+            foo = message with date { DATETIME($arg) }
+        """)
+        self.write_ftl_file("locales/en/bar.ftl", """
+            valid = Valid
+            bar = message with { syntax error
+        """)
+        self.write_ftl_file("locales/tr/bar.ftl", """
+            bar = message with internal conflict { DATETIME($arg) } { NUMBER($arg) }
+        """)
+        result = self.run_main()
+        self.assertEqual(result.output.strip(), """
+Errors:
+
+locales/en/bar.ftl:2:1: Junk found: Expected token: "}"
+locales/tr/bar.ftl:1:59: In message 'bar': FluentNumber number is not compatible with FluentDate
+  Explanation: incompatible types were detected for message argument '$arg'
+  Compare the following:
+    locales/tr/bar.ftl:1:40: Inferred type: FluentDate
+    locales/tr/bar.ftl:1:59: Inferred type: FluentNumber number
+Locale 'tr' - Message 'valid' missing
+Locale 'en' - Message 'bar' missing
+While trying to compile master 'foo' function:
+  FluentDate is not compatible with FluentNumber number
+  Explanation: incompatible types were detected for message argument '$arg'
+  Compare the following:
+    locales/en/foo.ftl:1:29: Inferred type: FluentNumber number
+    locales/tr/foo.ftl:1:27: Inferred type: FluentDate
+Aborted!
+        """.strip())
+
 
 class TestFileSelection(StandardLayoutMixin, unittest.TestCase):
 
