@@ -45,8 +45,6 @@ setup(
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Natural Language :: English",
-        "Programming Language :: Python :: 2",
-        "Programming Language :: Python :: 2.7",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.4",
         "Programming Language :: Python :: 3.5",
@@ -64,6 +62,6 @@ setup(
     package_dir={"": "src"},
     tests_require=test_requirements,  # for setup.py test
     url="https://github.com/elm-fluent/elm-fluent",
-    version="0.4.0.dev1",
+    version="0.4.0",
     zip_safe=False,
 )

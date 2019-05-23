@@ -1,8 +1,6 @@
 """
 Utilities for doing Python code generation
 """
-from __future__ import absolute_import, unicode_literals
-
 import contextlib
 import re
 
@@ -555,15 +553,10 @@ class Expression(ElmAst):
             )
         )
 
-    # Python 2.7 compatible kwarg syntax
-    def apply(self, *args, **kwargs):
+    def apply(self, *args, from_ftl_source=None):
         """
         Function application
         """
-        from_ftl_source = kwargs.pop("from_ftl_source", None)
-        assert not kwargs, "Unexpected keyword args {0}".format(
-            ", ".join(kwargs.keys())
-        )
         return FunctionCall(self, args, from_ftl_source=from_ftl_source)
 
 

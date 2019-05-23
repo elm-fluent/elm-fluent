@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """Console script for elm_fluent."""
-from __future__ import absolute_import, unicode_literals
-
 import os.path
 import time
 

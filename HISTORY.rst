@@ -2,12 +2,15 @@
 History
 =======
 
-0.4.0 (under development)
+0.5.0 (under development)
 -------------------------
-* ``ftl2elm --include`` option
 * Updated to Syntax 1.0 (fluent.syntax 0.15)
 * Various bug fixes and small improvements
 
+0.4.0 (2019-03-18)
+------------------
+* ftl2elm --include option
+* Dropped Python 2.7 support
 
 0.3.0 (2019-03-06)
 ------------------
