@@ -13,10 +13,6 @@ from . import __version__
 from .run import ErrorWhenMissing, FallbackToDefaultLocaleWhenMissing, run_compile
 from .utils import normpath
 
-# Without unicode_literals, it would be constant whack-a-mole with UnicodeDecodeErrors.
-# With it, with potentially have issues with file paths but not much else.
-click.disable_unicode_literals_warning = True
-
 
 @attr.s
 class CompilationOptions(object):
