@@ -313,7 +313,7 @@ def compile_master(module_name, locales, locale_modules, message_mapping, option
         [e for exports in sub_module_exports.values() for e in exports]
     )
 
-    for func_name in all_sub_module_exports:
+    for func_name in sorted(all_sub_module_exports):
         function_type = function_type_for_func_name(func_name)
         function_name = module.reserve_name(func_name, type=function_type)
         assert function_name == func_name, "{0} != {1} unexpectedly".format(
