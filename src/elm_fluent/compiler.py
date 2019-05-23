@@ -296,9 +296,9 @@ def compile_master(module_name, locales, locale_modules, message_mapping, option
     module.add_import(intl_locale.module, "Locale")
     module.add_import(fluent.module, "Fluent")
     module.add_import(html.module, "Html")
-    locale_module_local_names = {
-        locale: module_name_for_locale(locale) for locale in locales
-    }
+    locale_module_local_names = OrderedDict([
+        (locale, module_name_for_locale(locale)) for locale in locales
+    ])
 
     for locale, locale_module in locale_modules.items():
         if locale_module.exports:
