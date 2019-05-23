@@ -310,7 +310,7 @@ class TestCompiler(unittest.TestCase):
     def test_message_attr_reference(self):
         code, errs = compile_messages_to_elm(
             """
-            foo
+            foo =
                .attr = Foo Attr
             bar = { foo.attr }
         """,
@@ -692,7 +692,7 @@ class TestCompiler(unittest.TestCase):
                 "NUMBER() takes 1 positional argument(s) but 2 were given"
             ),
         )
-        self.assertEqual(type(errs[0].error_sources[0].expr), ast.CallExpression)
+        self.assertEqual(type(errs[0].error_sources[0].expr), ast.FunctionReference)
 
     def test_message_arg_type_mismatch(self):
         # Should return error gracefully
@@ -793,7 +793,7 @@ class TestCompiler(unittest.TestCase):
             self.locale,
         )
         self.assertEqual(len(errs), 1)
-        self.assertEqual(type(errs[0].error_sources[0].expr), ast.CallExpression)
+        self.assertEqual(type(errs[0].error_sources[0].expr), ast.FunctionReference)
 
     def test_message_with_attrs(self):
         code, errs = compile_messages_to_elm(
@@ -839,89 +839,6 @@ class TestCompiler(unittest.TestCase):
                 "Message Term"
         """,
         )
-
-    def test_variant_select_inline(self):
-        code, errs = compile_messages_to_elm(
-            """
-            -my-term = {
-                [a] A
-               *[b] B
-              }
-            foo = Before { -my-term[a] } After
-        """,
-            self.locale,
-        )
-        self.assertCodeEqual(
-            code,
-            """
-            foo : Locale.Locale -> a -> String
-            foo locale_ args_ =
-                "Before A After"
-        """,
-        )
-        self.assertEqual(errs, [])
-
-    def test_variant_select_default(self):
-        code, errs = compile_messages_to_elm(
-            """
-            -my-term = {
-                [a] A
-               *[b] B
-              }
-            foo = { -my-term }
-        """,
-            self.locale,
-        )
-        self.assertCodeEqual(
-            code,
-            """
-            foo : Locale.Locale -> a -> String
-            foo locale_ args_ =
-                "B"
-        """,
-        )
-        self.assertEqual(errs, [])
-
-    def test_variant_select_missing_variant(self):
-        # We don't use the default, it is more useful to give a compilation error
-        code, errs = compile_messages_to_elm(
-            """
-            -my-term = {
-                [a] A
-               *[b] B
-              }
-            foo = { -my-term[c] }
-        """,
-            self.locale,
-        )
-        self.assertEqual(errs[0].error_sources[0].message_id, "foo")
-        self.assertEqual(
-            errs[0], exceptions.ReferenceError("Unknown variant: -my-term[c]")
-        )
-
-    def test_variant_select_missing_term(self):
-        code, errs = compile_messages_to_elm(
-            """
-            foo = { -my-term[a] }
-        """,
-            self.locale,
-        )
-        self.assertEqual(errs[0].error_sources[0].message_id, "foo")
-        self.assertEqual(errs[0], exceptions.ReferenceError("Unknown term: -my-term"))
-
-    def test_variant_select_from_non_variant(self):
-        code, errs = compile_messages_to_elm(
-            """
-            -my-term = Term
-            foo = { -my-term[a] }
-        """,
-            self.locale,
-        )
-        self.assertEqual(errs[0].error_sources[0].message_id, "foo")
-        self.assertEqual(
-            errs[0], exceptions.ReferenceError("Unknown variant: -my-term[a]")
-        )
-        self.assertEqual(len(errs), 1)
 
     def test_select_string(self):
         code, errs = compile_messages_to_elm(
@@ -1202,10 +1119,10 @@ class TestCompiler(unittest.TestCase):
     def test_cycle_detection_with_attrs(self):
         code, errs = compile_messages_to_elm(
             """
-            foo
+            foo =
                .attr1 = { bar.attr2 }
 
-            bar
+            bar =
                .attr2 = { foo.attr1 }
         """,
             self.locale,

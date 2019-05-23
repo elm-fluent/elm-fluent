@@ -485,7 +485,7 @@ def compile_message(msg, msg_id, function_name, module, compiler_env):
         args=function_args_for_func_name(function_name),
     )
 
-    if contains_reference_cycle(msg, msg_id, compiler_env):
+    if contains_reference_cycle(msg, compiler_env):
         error = exceptions.CyclicReferenceError(
             "Cyclic reference in {0}".format(msg_id)
         )
@@ -508,7 +508,7 @@ def get_processing_order(message_ids_to_ast):
             if not isinstance(node, ast.BaseNode):
                 return
 
-            if isinstance(node, (ast.MessageReference, ast.AttributeExpression)):
+            if isinstance(node, ast.MessageReference):
                 ref = reference_to_id(node)
                 if ref in message_ids_to_ast:
                     calls.append(ref)
@@ -547,14 +547,9 @@ def get_processing_order(message_ids_to_ast):
 STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES = [
     # Message and Term attributes have already been loaded into the
     # message_ids_to_ast dict, and we get to their contents via
-    # AttributeExpression
+    # MessageReference and TermReference
     (ast.Message, "attributes"),
     (ast.Term, "attributes"),
-    # We don't recurse into AttributeExpression.ref, which is a
-    # MessageReference, because we have handled the contents of this ref via
-    # the parent AttributeExpression, and we don't want it to be handled as
-    # a standalone MessageReference which would mean something different.
-    (ast.AttributeExpression, "ref"),
     # for speed
     (ast.Message, "comment"),
     (ast.Term, "comment"),
@@ -590,20 +585,61 @@ def traverse_ast(node, fun, exclude_attributes=STANDARD_TRAVERSE_EXCLUDE_ATTRIBU
     return fun(node)
 
 
-def contains_reference_cycle(msg, msg_id, compiler_env):
+def contains_reference_cycle(msg, compiler_env):
+    """
+    Returns True if the message 'msg' contains a cyclic reference,
+    in the context of the other messages provided in compiler_env
+    """
+    # We traverse the AST starting from message, jumping to other messages and
+    # terms as necessary, and seeing if a path through the AST loops back to
+    # previously visited nodes at any point.
+
+    # This algorithm has some bugs compared to the runtime method in resolver.py
+    # For example, a pair of conditionally mutually recursive messages:
+
+    # foo = Foo { $arg ->
+    #      [left]    { bar }
+    #     *[right]   End
+    #  }
+
+    # bar = Bar { $arg ->
+    #     *[left]    End
+    #      [right]   { foo }
+    #  }
+
+    # These messages are rejected as containing cycles by this checker, when in
+    # fact they cannot go into an infinite loop, and the resolver correctly
+    # executes them.
+
+    # It is pretty difficult to come up with a compelling use case
+    # for this kind of thing though... so we are not too worried
+    # about fixing this bug, since we are erring on the conservative side.
+
     message_ids_to_ast = compiler_env.message_ids_to_ast
     term_ids_to_ast = compiler_env.term_ids_to_ast
 
-    visited_nodes = set([])
+    # We need to keep track of visited nodes. If we use just a single set for
+    # each top level message, then things like this would be rejected:
+    #
+    #     message = { -term } { -term }
+    #
+    # because we would visit the term twice.
+    #
+    # So we have a stack of sets:
+    visited_node_stack = [set([])]
+    # The top of this stack represents the set of nodes in the current path of
+    # visited nodes. We push a copy of the top set onto the stack when we
+    # traverse into a sub-node, and pop it off when we come back.
+
     checks = []
 
     def checker(node):
         if isinstance(node, ast.BaseNode):
             node_id = id(node)
-            if node_id in visited_nodes:
+            if node_id in visited_node_stack[-1]:
                 checks.append(True)
                 return
-            visited_nodes.add(node_id)
+            visited_node_stack[-1].add(node_id)
         else:
             return
 
@@ -611,25 +647,19 @@ def contains_reference_cycle(msg, msg_id, compiler_env):
         # different nodes (messages via a runtime function call, terms via
         # inlining), including the fallback strategies that are used.
         sub_node = None
-        if isinstance(node, ast.MessageReference):
-            ref = reference_to_id(node)
-            if ref in message_ids_to_ast:
-                sub_node = message_ids_to_ast[ref]
-        elif isinstance(node, ast.TermReference):
-            ref = reference_to_id(node)
-            if ref in term_ids_to_ast:
-                sub_node = term_ids_to_ast[ref]
-        elif isinstance(node, ast.AttributeExpression):
-            ref = reference_to_id(node)
-            if ref in message_ids_to_ast:
-                sub_node = message_ids_to_ast[ref]
-            elif ref in term_ids_to_ast:
-                sub_node = term_ids_to_ast[ref]
+        if isinstance(node, (ast.MessageReference, ast.TermReference)):
+            ref_id = reference_to_id(node)
+            if ref_id in message_ids_to_ast:
+                sub_node = message_ids_to_ast[ref_id]
+            elif ref_id in term_ids_to_ast:
+                sub_node = term_ids_to_ast[ref_id]
 
         if sub_node is not None:
+            visited_node_stack.append(visited_node_stack[-1].copy())
             traverse_ast(sub_node, checker)
             if any(checks):
                 return
+            visited_node_stack.pop()
 
         return
 
@@ -748,12 +778,62 @@ def compile_expr_message_reference(reference, local_scope, compiler_env):
 
 @compile_expr.register(ast.TermReference)
 def compile_expr_term_reference(reference, local_scope, compiler_env):
-    name = reference_to_id(reference)
-    if name in compiler_env.term_ids_to_ast:
-        term = compiler_env.term_ids_to_ast[name]
-        return compile_term(term, local_scope, compiler_env)
+    term_id = reference_to_id(reference)
+    if term_id in compiler_env.term_ids_to_ast:
+        term = compiler_env.term_ids_to_ast[term_id]
+
+        if reference.arguments:
+            args = [compile_expr(arg, local_scope, compiler_env) for arg in reference.arguments.positional]
+            kwargs = {
+                kwarg.name.name: compile_expr(kwarg.value, local_scope, compiler_env)
+                for kwarg in reference.arguments.named
+            }
+        else:
+            args = []
+            kwargs = {}
+
+        if args:
+            compiler_env.add_current_message_error(
+                exceptions.TermParameterError(
+                    "Positional arguments passed to term '{0}'".format(
+                        reference_to_id(reference)
+                    )
+                ),
+                reference,
+            )
+            return codegen.CompilationError()
+
+        used_variables = get_term_used_variables(term, compiler_env)
+        bad_kwarg = False
+        for kwarg_name in kwargs:
+            if kwarg_name not in used_variables:
+                bad_kwarg = True
+                if len(used_variables) > 0:
+                    compiler_env.add_current_message_error(
+                        exceptions.TermParameterError(
+                            "Parameter '{0}' was passed to term '{1}' which does not take this parameter. Did you mean: {2}?".format(
+                                kwarg_name,
+                                term_id,
+                                ", ".join(sorted(used_variables)),
+                            )
+                        ),
+                        reference,
+                    )
+                else:
+                    compiler_env.add_current_message_error(
+                        exceptions.TermParameterError(
+                            "Parameter '{0}' was passed to term '{1}' which does not take parameters.".format(
+                                kwarg_name, term_id
+                            )
+                        ),
+                        reference,
+                    )
+        if bad_kwarg:
+            return codegen.CompilationError()
+
+        return compile_term(term, local_scope, compiler_env, term_args=kwargs)
     else:
-        return unknown_reference(name, local_scope, reference, compiler_env)
+        return unknown_reference(term_id, local_scope, reference, compiler_env)
 
 
 def compile_term(term, local_scope, compiler_env, term_args=None):
@@ -795,44 +875,6 @@ def unknown_reference(name, local_scope, expr, compiler_env):
         error = exceptions.ReferenceError("Unknown message: {0}".format(name))
     compiler_env.add_current_message_error(error, expr)
     return codegen.CompilationError()
-
-
-@compile_expr.register(ast.AttributeExpression)
-def compile_expr_attribute_expression(attr_expr, local_scope, compiler_env):
-    msg_id = reference_to_id(attr_expr)
-    # Message attribute
-    if msg_id in compiler_env.message_mapping:
-        return do_message_call(msg_id, local_scope, attr_expr, compiler_env)
-    # Term attribute
-    elif msg_id in compiler_env.term_ids_to_ast:
-        term = compiler_env.term_ids_to_ast[msg_id]
-        return compile_expr(term, local_scope, compiler_env)
-    # Missing
-    else:
-        return unknown_reference(msg_id, local_scope, attr_expr, compiler_env)
-
-
-@compile_expr.register(ast.VariantList)
-def compile_expr_variant_list(
-    variant_list, local_scope, compiler_env, selected_key=None, term_id=None
-):
-    default = None
-    found = None
-    for variant in variant_list.variants:
-        if variant.default:
-            default = variant
-        if selected_key is not None and variant.key.name == selected_key.name:
-            found = variant
-
-    if found is None:
-        found = default
-        if selected_key is not None:
-            error = exceptions.ReferenceError(
-                "Unknown variant: {0}[{1}]".format(term_id, selected_key.name)
-            )
-            compiler_env.add_current_message_error(error, selected_key)
-            return codegen.CompilationError()
-    return compile_expr(found.value, local_scope, compiler_env)
 
 
 def is_cldr_plural_form_key(key_expr):
@@ -1051,29 +1093,6 @@ def compile_expr_identifier(name, local_scope, compiler_env):
     return codegen.String(name.name)
 
 
-@compile_expr.register(ast.VariantExpression)
-def compile_expr_variant_expression(variant_expr, local_scope, compiler_env):
-    term_id = reference_to_id(variant_expr.ref)
-    if term_id in compiler_env.term_ids_to_ast:
-        term_val = compiler_env.term_ids_to_ast[term_id].value
-        if isinstance(term_val, ast.VariantList):
-            return compile_expr_variant_list(
-                term_val,
-                local_scope,
-                compiler_env,
-                selected_key=variant_expr.key,
-                term_id=term_id,
-            )
-        else:
-            error = exceptions.ReferenceError(
-                "Unknown variant: {0}[{1}]".format(term_id, variant_expr.key.name)
-            )
-            compiler_env.add_current_message_error(error, variant_expr)
-            return codegen.CompilationError()
-    else:
-        return unknown_reference(term_id, local_scope, variant_expr, compiler_env)
-
-
 @compile_expr.register(ast.VariableReference)
 def compile_expr_variable_reference(argument, local_scope, compiler_env):
     name = argument.id.name
@@ -1092,62 +1111,15 @@ def compile_expr_variable_reference(argument, local_scope, compiler_env):
     return arg
 
 
-@compile_expr.register(ast.CallExpression)
+@compile_expr.register(ast.FunctionReference)
 def compile_expr_call_expression(expr, local_scope, compiler_env):
-    args = [compile_expr(arg, local_scope, compiler_env) for arg in expr.positional]
+    args = [compile_expr(arg, local_scope, compiler_env) for arg in expr.arguments.positional]
     kwargs = {
         kwarg.name.name: compile_expr(kwarg.value, local_scope, compiler_env)
-        for kwarg in expr.named
+        for kwarg in expr.arguments.named
     }
 
-    if isinstance(expr.callee, (ast.TermReference, ast.AttributeExpression)):
-        if args:
-            compiler_env.add_current_message_error(
-                exceptions.TermParameterError(
-                    "Positional arguments passed to term '{0}'".format(
-                        reference_to_id(expr.callee)
-                    )
-                ),
-                expr,
-            )
-            return codegen.CompilationError()
-
-        term_id = reference_to_id(expr.callee)
-        if term_id in compiler_env.term_ids_to_ast:
-            term = compiler_env.term_ids_to_ast[term_id]
-            used_variables = get_term_used_variables(term, compiler_env)
-            bad_kwarg = False
-            for kwarg_name in kwargs:
-                if kwarg_name not in used_variables:
-                    bad_kwarg = True
-                    if len(used_variables) > 0:
-                        compiler_env.add_current_message_error(
-                            exceptions.TermParameterError(
-                                "Parameter '{0}' was passed to term '{1}' which does not take this parameter. Did you mean: {2}?".format(
-                                    kwarg_name,
-                                    term_id,
-                                    ", ".join(sorted(used_variables)),
-                                )
-                            ),
-                            expr,
-                        )
-                    else:
-                        compiler_env.add_current_message_error(
-                            exceptions.TermParameterError(
-                                "Parameter '{0}' was passed to term '{1}' which does not take parameters.".format(
-                                    kwarg_name, term_id
-                                )
-                            ),
-                            expr,
-                        )
-            if bad_kwarg:
-                return codegen.CompilationError()
-
-            return compile_term(term, local_scope, compiler_env, term_args=kwargs)
-        else:
-            return unknown_reference(term_id, local_scope, expr, compiler_env)
-
-    function_name = expr.callee.id.name
+    function_name = expr.id.name
 
     if function_name in compiler_env.functions:
         function_spec = compiler_env.functions[function_name]
@@ -1534,7 +1506,7 @@ def is_NUMBER_function_call(codegen_ast):
 
 def reference_to_id(ref):
     """
-    Returns a string reference for a MessageReference, TermReference or AttributeExpression
+    Returns a string reference for a MessageReference or TermReference
     AST node.
 
     e.g.
@@ -1543,11 +1515,14 @@ def reference_to_id(ref):
        -term
        -term.attr
     """
-    if isinstance(ref, ast.AttributeExpression):
-        return _make_attr_id(reference_to_id(ref.ref), ref.name.name)
     if isinstance(ref, ast.TermReference):
-        return TERM_SIGIL + ref.id.name
-    return ref.id.name
+        start = TERM_SIGIL + ref.id.name
+    else:
+        start = ref.id.name
+
+    if ref.attribute:
+        return _make_attr_id(start, ref.attribute.name)
+    return start
 
 
 def ast_to_id(ast_obj):
@@ -1584,10 +1559,6 @@ def get_term_used_variables(term, compiler_env):
         if isinstance(node, ast.VariableReference):
             found_variables.append(node.id.name)
         elif isinstance(node, ast.TermReference):
-            ref = reference_to_id(node)
-            if ref in term_ids_to_ast:
-                sub_node = term_ids_to_ast[ref]
-        elif isinstance(node, ast.AttributeExpression):
             ref = reference_to_id(node)
             if ref in term_ids_to_ast:
                 sub_node = term_ids_to_ast[ref]
