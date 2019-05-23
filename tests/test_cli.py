@@ -175,8 +175,8 @@ locales/tr/bar.ftl:1:59: In message 'bar': FluentNumber number is not compatible
   Compare the following:
     locales/tr/bar.ftl:1:40: Inferred type: FluentDate
     locales/tr/bar.ftl:1:59: Inferred type: FluentNumber number
-Locale 'tr' - Message 'valid' missing
 Locale 'en' - Message 'bar' missing
+Locale 'tr' - Message 'valid' missing
 While trying to compile master 'foo' function:
   FluentDate is not compatible with FluentNumber number
   Explanation: incompatible types were detected for message argument '$arg'

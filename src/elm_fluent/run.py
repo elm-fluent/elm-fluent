@@ -86,6 +86,7 @@ class FallbackToDefaultLocaleWhenMissing(MissingTranslationStrategy):
 
 def run_compile(options):
     locales = find_locales(options.locales_fs, options.locales_dir, options.include)
+    locales.sort()
     if not locales:
         raise click.UsageError(
             "No locale directories (directories containing .ftl files) found in {0} directory"
