@@ -3,8 +3,6 @@
 
 """The setup script."""
 
-import sys
-
 from setuptools import find_packages, setup
 
 with open("README.rst") as readme_file:
@@ -23,10 +21,6 @@ requirements = [
     "watchdog>=0.8.3",
     "fs>=2.4.2",
 ]
-
-if sys.version_info < (3, 4):
-    # functools.singledispatch is in stdlib from Python 3.4 onwards.
-    requirements.append("singledispatch>=3.4")
 
 # It would be nice to inline requirements_dev.txt here, add:
 #    extras_require={
