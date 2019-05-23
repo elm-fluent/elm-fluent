@@ -50,6 +50,7 @@ Status
 * Rough around the edges, but being used in production. Please see the list of `open issues
   <https://github.com/elm-fluent/elm-fluent/issues>`_.
 * A pretty complete test suite, and sufficient docs.
+* Good attention to usability in terms of nice error messages.
 * Compatibility: Elm 0.18 only.
 
   Elm 0.19 is problematic - we require a wrapper for `Intl
@@ -62,7 +63,11 @@ Status
   <https://github.com/vanwagonet/elm-intl>`_ which has proved ideal for our
   usage, but the core team apparently `quickly dismissed
   <https://discourse.elm-lang.org/t/state-of-localization-l10n-and-v0-19/1541/18>`_
-  adoption of a library like that.
+  adoption of a library like that. It has been difficult to discuss this
+  properly on Elm forums because of the core team's propensity to `close
+  threads without allowing replies to their posts
+  <https://discourse.elm-lang.org/t/state-of-localization-l10n-and-v0-19/1541/19>`_
+  which makes progress difficult.
 
   In light of this, and other problems caused by the restriction on native
   modules in 0.19, the author of elm-fluent may well be forced to move away from
@@ -73,27 +78,6 @@ Status
   will likely stop.
 
 * Free software: MIT license
-* Elm 0.18 only.
-
-  The restrictions on native modules in 0.19 bring very big problems for this
-  project, because we need a wrapper around `Intl
-  <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl>`_.
-  There is no official Elm wrapper, and this restriction stops us from writing
-  our own.
-
-  It's also unclear whether the core Elm team will be able to create an adequate
-  wrapper any time soon, and it has been difficult to discuss this properly on
-  Elm forum's because of the core team's propensity to `close threads without
-  allowing replies to their posts
-  <https://discourse.elm-lang.org/t/state-of-localization-l10n-and-v0-19/1541/19>`_
-  which makes progress difficult.
-
-  In addition, the author of elm-fluent has other blocking needs for native
-  modules, in addition to this, which may make moving away from Elm inevitable.
-  In that situation the most likely outcome is a migration to
-  ReasonML/bucklescript, and elm-fluent will be converted (probably fairly
-  easily) into a tool for that platform.
-
 
 Credits
 -------
