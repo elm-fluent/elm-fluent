@@ -299,6 +299,31 @@ class TypeSource(object):
     type_obj = attr.ib()
 
 
+@attr.s
+class UniqueList(object):
+    _items = attr.ib(factory=list)
+
+    def append(self, item):
+        if item not in self._items:
+            self._items.append(item)
+
+    def extend(self, other):
+        for s in other:
+            self.append(s)
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def __bool__(self):
+        return bool(self._items)
+
+    def __len__(self):
+        return len(self._items)
+
+    def __getitem__(self, idx):
+        return self._items[idx]
+
+
 class Record(ElmType):
     def __init__(self, **fields):
         """
@@ -311,7 +336,7 @@ class Record(ElmType):
             self.add_field(name, type_obj)
         self.fixed = bool(fields)
         if not self.fixed:
-            self.field_type_ftl_sources = defaultdict(list)
+            self.field_type_ftl_sources = defaultdict(UniqueList)
 
     def add_field(self, name, type_obj=None, from_ftl_source=None):
         """
@@ -343,9 +368,7 @@ class Record(ElmType):
                 )
             self.fields[name] = type_obj
             if from_ftl_source is not None:
-                self.field_type_ftl_sources[name].append(
-                    TypeSource(from_ftl_source, type_obj)
-                )
+                self.field_type_ftl_sources[name].append(TypeSource(from_ftl_source, type_obj))
 
     def constrain(self, other):
         if isinstance(other, UnconstrainedType):

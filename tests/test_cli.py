@@ -109,6 +109,9 @@ class TestCreate(StandardLayoutMixin, unittest.TestCase):
 
 class TestErrors(StandardLayoutMixin, unittest.TestCase):
 
+    locales = ["en", "tr"]
+    maxDiff = None
+
     def test_type_error_conflicting_functions(self):
         self.write_ftl_file("locales/en/foo.ftl", """
             foo =
@@ -127,6 +130,26 @@ locales/en/foo.ftl:3:23: In message 'foo': FluentDate is not compatible with Flu
 Aborted!
 """.strip())
         self.assertFileSystemEquals(self.output_fs, {})
+
+    def test_type_errors_conflicting_across_files(self):
+        self.write_ftl_file("locales/en/foo.ftl", """
+            foo = message with number { NUMBER($arg) }
+        """)
+        self.write_ftl_file("locales/tr/foo.ftl", """
+            foo = message with date { DATETIME($arg) }
+        """)
+        result = self.run_main()
+        self.assertEqual(result.output.strip(), """
+Errors:
+
+While trying to compile master 'foo' function:
+  FluentDate is not compatible with FluentNumber number
+  Explanation: incompatible types were detected for message argument '$arg'
+  Compare the following:
+    locales/en/foo.ftl:1:29: Inferred type: FluentNumber number
+    locales/tr/foo.ftl:1:27: Inferred type: FluentDate
+Aborted!
+        """.strip())
 
 
 class TestFileSelection(StandardLayoutMixin, unittest.TestCase):
