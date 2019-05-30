@@ -25,8 +25,9 @@ number of different languages. Mozilla have extracted parts of their 'l20n'
 solution (used by apps like Firefox and Thunderbird) into a re-usable
 specification designed specifically for the web.
 
-elm-fluent is a full implementation of this specification for Elm (currently
-supporting the Fluent 0.8 syntax).
+elm-fluent is a full implementation of this specification for Elm (see the
+`change log <https://elm-fluent.readthedocs.io/en/latest/history.html>`_ for exact 
+version support).
 
 It operates as a command line tool that compiles ``.ftl`` files to ``.elm``
 files. The result is that each message becomes a function that will generate a
