@@ -361,12 +361,6 @@ class _Assignment(Statement):
         self.name = name
         self.value = value
 
-    # def format_names(self):
-    #     if len(self.names) == 1:
-    #         return self.names[0]
-    #     else:
-    #         return "({0})".format(", ".join(n for n in self.names))
-
     def build_source(self, builder):
         builder.add_part(self.name)
         builder.add_part(" = ")
