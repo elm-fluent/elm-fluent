@@ -7,10 +7,16 @@ import six
 from elm_fluent import exceptions
 
 # This module is the heart of the type tracking the compiler does. Types are
-# associated with node objects in the codegen.py. It is currently rather adhoc
-# and incomplete, but suffices for our purposes.
+# associated with AST objects in codegen.py. It is currently very adhoc and
+# incomplete, and in fact is probably completely backwards:
 #
-# There are 4 main purposes of this type tracking:
+# It does type checking and inference on the Elm AST as it is in the process of
+# being constructed, and the inference is used to generate the right type
+# signatures for the record types of parameters passed to messages. It would
+# probably have been much more sensible to do type inference on the Fluent AST
+# objects instead.
+#
+# As it stands, however, there are 4 main purposes of this type tracking:
 #
 # 1. To prevent (or provide early feedback) for many type errors in the development
 #    of the compiler, so that generated code has a much better chance of at least
@@ -24,8 +30,8 @@ from elm_fluent import exceptions
 #    eventually if they need to be converted to strings, but not eagerly because
 #    select expressions need to handle them as numbers.
 #
-# 4. For determining the correct types of the passed in record argument, so that we can
-#    generate correct type signatures for the generated functions.
+# 4. For determining the correct types of the passed in record argument, so that
+#    we can generate correct type signatures for the generated functions.
 #
 # However, for item 1, while the current code worked OK initially, after the
 # addition of type parameters there are now many bugs e.g. an expression like
@@ -38,6 +44,9 @@ from elm_fluent import exceptions
 # over with this whole type system, using proper Hindler-Milney type inference
 # perhaps. See
 # https://github.com/rob-smallshire/hindley-milner-python/blob/master/inference.py
+# Or just apply type checking/inference to the Fluent AST nodes, which would
+# probably be a lot simpler, and if needed do very basic tracking of types on
+# the Elm AST nodes (which will all be fully known by that point).
 
 
 def with_auto_env(meth):
