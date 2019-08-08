@@ -8,13 +8,14 @@ from elm_fluent import exceptions
 
 # This module is the heart of the type tracking the compiler does. Types are
 # associated with AST objects in codegen.py. It is currently very adhoc and
-# incomplete, and in fact is probably completely backwards:
+# incomplete, and in fact rather ridiculous:
 #
 # It does type checking and inference on the Elm AST as it is in the process of
 # being constructed, and the inference is used to generate the right type
-# signatures for the record types of parameters passed to messages. It would
-# probably have been much more sensible to do type inference on the Fluent AST
-# objects instead.
+# signatures for the record types of parameters passed to messages. It would of
+# course have been much more sensible to do type inference on the much simpler
+# Fluent AST objects instead. But I only realized that I'd got it completely
+# backwards after it was working well enough for my needs. Oops.
 #
 # As it stands, however, there are 4 main purposes of this type tracking:
 #
@@ -41,12 +42,11 @@ from elm_fluent import exceptions
 #
 # These do not currently affect the correctness of output. To fix these issues,
 # and others marked as TODO in this module, it would probably be best to start
-# over with this whole type system, using proper Hindler-Milney type inference
-# perhaps. See
-# https://github.com/rob-smallshire/hindley-milner-python/blob/master/inference.py
-# Or just apply type checking/inference to the Fluent AST nodes, which would
+# over and apply type checking/inference to the Fluent AST nodes, which would
 # probably be a lot simpler, and if needed do very basic tracking of types on
-# the Elm AST nodes (which will all be fully known by that point).
+# the Elm AST nodes (which will all be fully known by that point). Some of the
+# functions in here that generated Elm type signatures will still be needed in
+# some form.
 
 
 def with_auto_env(meth):
