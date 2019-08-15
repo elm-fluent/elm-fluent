@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """The setup script."""
+import sys
 
 from setuptools import find_packages, setup
 
@@ -17,7 +18,7 @@ requirements = [
     "attrs>=18",
     "language-tags>=0.4.4",
     "beautifulsoup4>=4.6.3",
-    "lxml>=4.2.4",
+    "lxml>=4.2.4" if sys.version_info >= (3, 5) else "lxml>=4.2.4,<4.4",
     "watchdog>=0.8.3",
     "fs>=2.4.2",
 ]
