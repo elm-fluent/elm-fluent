@@ -2,6 +2,9 @@
 History
 =======
 
+0.6.0 (under development)
+-------------------------
+
 0.5.0 (2019-08-15)
 ------------------
 * Updated to Syntax 1.0 (fluent.syntax 0.15)
