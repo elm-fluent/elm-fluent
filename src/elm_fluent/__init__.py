@@ -4,4 +4,4 @@
 
 __author__ = """Luke Plant"""
 __email__ = "L.Plant.98@cantab.net"
-__version__ = "0.4.0"
+__version__ = "0.5.0"

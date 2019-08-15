@@ -36,7 +36,7 @@ setup(
     author="Luke Plant",
     author_email="L.Plant.98@cantab.net",
     classifiers=[
-        "Development Status :: 2 - Pre-Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Natural Language :: English",
@@ -57,6 +57,6 @@ setup(
     package_dir={"": "src"},
     tests_require=test_requirements,  # for setup.py test
     url="https://github.com/elm-fluent/elm-fluent",
-    version="0.4.0",
+    version="0.5.0",
     zip_safe=False,
 )
