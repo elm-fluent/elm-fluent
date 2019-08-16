@@ -17,7 +17,7 @@ from .stubs import (
     intl_pluralrules,
 )
 from .stubs.defaults import default_imports
-from .utils import traverse_ast
+from .utils import get_ast_nodes, traverse_ast
 
 try:
     from functools import singledispatch
@@ -498,21 +498,24 @@ def compile_message(msg, msg_id, function_name, module, compiler_env):
 
 
 def get_processing_order(message_ids_to_ast):
+    """
+    Given a dictionary of {message_id: Message},
+    returns a dictionary {message_id: processing order}
+    """
     call_graph = {}
 
     for msg_id, msg in message_ids_to_ast.items():
         calls = []
 
-        def find_message_calls(node):
+        for node in get_ast_nodes(msg):
             if not isinstance(node, ast.BaseNode):
-                return
+                continue
 
             if isinstance(node, ast.MessageReference):
                 ref = reference_to_id(node)
                 if ref in message_ids_to_ast:
                     calls.append(ref)
 
-        traverse_ast(msg, find_message_calls)
         call_graph[msg_id] = calls
 
     processed = []

@@ -7,7 +7,7 @@ def normpath(fs, path):
     return os.path.normpath(fs.getsyspath(path))
 
 
-STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES = [
+STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES = {
     # Message and Term attributes have already been loaded into the
     # message_ids_to_ast dict, and we get to their contents via
     # MessageReference and TermReference
@@ -16,7 +16,30 @@ STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES = [
     # for speed
     (ast.Message, "comment"),
     (ast.Term, "comment"),
-]
+}
+
+STANDARD_TRAVERSE_EXCLUDE_TYPES = {ast.Span}
+
+
+def get_ast_nodes(node, exclude_attributes=STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES, exclude_types=STANDARD_TRAVERSE_EXCLUDE_TYPES):
+    """
+    Yields all nodes in AST tree, postorder traversal
+    """
+    if exclude_types is not None and type(node) in exclude_types:
+        return
+    if isinstance(node, ast.BaseNode):
+        parts = vars(node).items()
+        for name, value in parts:
+            if exclude_attributes is not None and (type(node), name) in exclude_attributes:
+                continue
+            yield from get_ast_nodes(value)
+        yield node
+    elif isinstance(node, list):
+        for item in node:
+            yield from get_ast_nodes(item)
+        yield node
+    elif isinstance(node, (int, str)):
+        yield node
 
 
 def traverse_ast(node, fun, exclude_attributes=STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES):
@@ -28,21 +51,5 @@ def traverse_ast(node, fun, exclude_attributes=STANDARD_TRAVERSE_EXCLUDE_ATTRIBU
     exclude_attributes is a list of (node type, attribute name) tuples
     that should not be recursed into.
     """
-
-    def visit(value):
-        """Call `fun` on `value` and its descendants."""
-        if isinstance(value, ast.BaseNode):
-            return traverse_ast(value, fun, exclude_attributes=exclude_attributes)
-        if isinstance(value, list):
-            return fun(list(map(visit, value)))
-        else:
-            return fun(value)
-
-    # Use all attributes found on the node
-    parts = vars(node).items()
-    for name, value in parts:
-        if exclude_attributes is not None and (type(node), name) in exclude_attributes:
-            continue
-        visit(value)
-
-    return fun(node)
+    for subnode in get_ast_nodes(node):
+        fun(subnode)
