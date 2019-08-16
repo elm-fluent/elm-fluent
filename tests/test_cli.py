@@ -129,6 +129,48 @@ Aborted!
 """.strip())
         self.assertFileSystemEquals(self.output_fs, {})
 
+    def test_incompatible_types_between_messages(self):
+        # Inferred type of $items is for `you-have` is string, but number for `we-have`
+        self.write_ftl_file("locales/en/foo.ftl", """
+        you-have = you have { $items }
+
+        we-have = I have { NUMBER($items) } and { you-have }
+        """)
+        result = self.run_main()
+        assert result.output.strip() == """
+Errors:
+
+locales/en/foo.ftl:3:43: In message 'we-have': String is not compatible with FluentNumber number
+  Explanation: incompatible types were detected for message argument '$items'
+  Compare the following:
+    locales/en/foo.ftl:3:20: Inferred type: FluentNumber number
+    locales/en/foo.ftl:1:21: Inferred type: String
+
+  Hint: You may need to use NUMBER() or DATETIME() builtins to force the correct type
+Aborted!
+""".strip()
+
+    def test_number_inference_from_selector(self):
+        # Really here to check that we are getting accurate line/column numbers
+        # for this case.
+        self.write_ftl_file("locales/en/foo.ftl", """
+        foo = You have { $count ->
+             [0]     zero items
+            *[other] some items
+          }, on { DATETIME($count) }
+        """)
+        result = self.run_main()
+        assert result.output.strip() == """
+Errors:
+
+locales/en/foo.ftl:4:11: In message 'foo': FluentDate is not compatible with FluentNumber number
+  Explanation: incompatible types were detected for message argument '$count'
+  Compare the following:
+    locales/en/foo.ftl:2:6: Inferred type: FluentNumber number
+    locales/en/foo.ftl:4:11: Inferred type: FluentDate
+Aborted!
+""".strip()
+
     def test_type_errors_conflicting_across_files(self):
         self.write_ftl_file("locales/en/foo.ftl", """
             foo = message with number { NUMBER($arg) }
