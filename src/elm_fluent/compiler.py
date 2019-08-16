@@ -5,8 +5,8 @@ import attr
 import six
 from fluent.syntax import FluentParser, ast
 
-from elm_fluent import codegen, exceptions, html_compiler, types
-from elm_fluent.stubs import (
+from . import codegen, exceptions, html_compiler, types
+from .stubs import (
     defaults as dtypes,
     fluent,
     html,
@@ -16,7 +16,8 @@ from elm_fluent.stubs import (
     intl_numberformat,
     intl_pluralrules,
 )
-from elm_fluent.stubs.defaults import default_imports
+from .stubs.defaults import default_imports
+from .utils import traverse_ast
 
 try:
     from functools import singledispatch
@@ -540,47 +541,6 @@ def get_processing_order(message_ids_to_ast):
         else:
             current_msg_id = unprocessed_called_msg_ids[0]
     return {k: i for i, k in enumerate(processed)}
-
-
-STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES = [
-    # Message and Term attributes have already been loaded into the
-    # message_ids_to_ast dict, and we get to their contents via
-    # MessageReference and TermReference
-    (ast.Message, "attributes"),
-    (ast.Term, "attributes"),
-    # for speed
-    (ast.Message, "comment"),
-    (ast.Term, "comment"),
-]
-
-
-def traverse_ast(node, fun, exclude_attributes=STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES):
-    """Postorder-traverse this node and apply `fun` to all child nodes.
-
-    Traverse this node depth-first applying `fun` to subnodes and leaves.
-    Children are processed before parents (postorder traversal).
-
-    exclude_attributes is a list of (node type, attribute name) tuples
-    that should not be recursed into.
-    """
-
-    def visit(value):
-        """Call `fun` on `value` and its descendants."""
-        if isinstance(value, ast.BaseNode):
-            return traverse_ast(value, fun, exclude_attributes=exclude_attributes)
-        if isinstance(value, list):
-            return fun(list(map(visit, value)))
-        else:
-            return fun(value)
-
-    # Use all attributes found on the node
-    parts = vars(node).items()
-    for name, value in parts:
-        if exclude_attributes is not None and (type(node), name) in exclude_attributes:
-            continue
-        visit(value)
-
-    return fun(node)
 
 
 def contains_reference_cycle(msg, compiler_env):
