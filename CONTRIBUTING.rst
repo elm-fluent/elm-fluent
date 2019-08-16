@@ -96,10 +96,21 @@ Ready to contribute? Here's how to set up `elm_fluent` for local development.
    tests, including testing other Python versions with tox::
 
     $ flake8 elm_fluent tests
-    $ ./runtests.py
+    $ py.test
     $ tox
 
    To get flake8 and tox, just pip install them into your virtualenv.
+
+   A fast test run::
+
+     $ py.test -k-slow
+
+   See py.test docs for more collection options
+
+   Show the browser for the end to end tests::
+
+     $ TEST_SHOW_BROWSER=1 py.test
+
 
 6. Commit your changes and push your branch to GitHub::
 
@@ -122,13 +133,6 @@ Before you submit a pull request, check that it meets these guidelines:
    https://travis-ci.org/elm-fluent/elm-fluent/pull_requests
    and make sure that the tests pass for all supported Python versions.
 
-Tips
-----
-
-To run a subset of tests::
-
-
-    $ python -m unittest tests.test_elm_fluent
 
 Deploying
 ---------

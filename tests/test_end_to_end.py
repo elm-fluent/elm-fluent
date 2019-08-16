@@ -5,6 +5,7 @@ import sys
 import time
 import unittest
 
+import pytest
 from click.testing import CliRunner
 from pyvirtualdisplay import Display
 from selenium import webdriver
@@ -20,7 +21,7 @@ def noisy_check_call(cmd):
     subprocess.check_call(cmd)
 
 
-@unittest.skipIf(os.environ.get("TEST_FAST_RUN", "0") == "1", "Skipping slow tests")
+@pytest.mark.slow
 class TestEndToEnd(unittest.TestCase):
 
     visible = os.environ.get("TEST_SHOW_BROWSER", "0") == "1"

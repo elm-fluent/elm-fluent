@@ -5,7 +5,6 @@ include LICENSE
 include README.rst
 include .editorconfig
 include release.sh
-include runtests.py
 include tox.ini
 include requirements_dev.txt
 include *.json
