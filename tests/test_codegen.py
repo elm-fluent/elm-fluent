@@ -105,7 +105,8 @@ class TestCodeGen(unittest.TestCase):
         )
         module.reserve_name("myfunc", type=function_type)
         func = codegen.Function(
-            "myfunc", args=["myarg1", "myarg2"], parent_scope=module
+            "myfunc", args=["myarg1", "myarg2"], parent_scope=module,
+            function_type=function_type,
         )
         func.body.value = codegen.String("hello")
         func = codegen.simplify(func)
@@ -118,24 +119,6 @@ class TestCodeGen(unittest.TestCase):
         """,
         )
         self.assertEqual(func.variables["myarg2"].type, dtypes.Number)
-
-    def test_attribute_reference_in_function(self):
-        module = codegen.Module()
-        record_type = types.Record()
-        function_type = types.Function(record_type, dtypes.String)
-        module.reserve_name("myfunc", type=function_type)
-        func = codegen.Function("myfunc", args=["myarg"], parent_scope=module)
-        func.body.value = codegen.AttributeReference(func.variables["myarg"], "myattr")
-        func.finalize()
-        codegen.simplify(func)
-        self.assertCodeEqual(
-            func.as_source_code(),
-            """
-            myfunc : { a | myattr : String } -> String
-            myfunc myarg =
-                myarg.myattr
-        """,
-        )
 
     def test_let_no_assignments(self):
         module = codegen.Module()

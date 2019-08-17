@@ -1,52 +1,10 @@
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 from functools import wraps
 
 import attr
-import six
 
-from elm_fluent import exceptions
-
-# This module is the heart of the type tracking the compiler does. Types are
-# associated with AST objects in codegen.py. It is currently very adhoc and
-# incomplete, and in fact rather ridiculous:
-#
-# It does type checking and inference on the Elm AST as it is in the process of
-# being constructed, and the inference is used to generate the right type
-# signatures for the record types of parameters passed to messages. It would of
-# course have been much more sensible to do type inference on the much simpler
-# Fluent AST objects instead. But I only realized that I'd got it completely
-# backwards after it was working well enough for my needs. Oops.
-#
-# As it stands, however, there are 4 main purposes of this type tracking:
-#
-# 1. To prevent (or provide early feedback) for many type errors in the development
-#    of the compiler, so that generated code has a much better chance of at least
-#    being type correct.
-#
-# 2. To catch many type errors the users (i.e. FTL authors) might make, for example
-#    if a message has both `DATETIME($arg)` and `NUMBER($arg)` it is a clear type error
-#
-# 3. For tracing the types we need to work out what conversions need to be done
-#    at which stage e.g. numbers need to be run through NumberFormat.format
-#    eventually if they need to be converted to strings, but not eagerly because
-#    select expressions need to handle them as numbers.
-#
-# 4. For determining the correct types of the passed in record argument, so that
-#    we can generate correct type signatures for the generated functions.
-#
-# However, for item 1, while the current code worked OK initially, after the
-# addition of type parameters there are now many bugs e.g. an expression like
-# `Maybe.Just.apply(codegen.Number(1))` should have a type of 'Maybe Int', but
-# actually returns 'Maybe a', all TypeParams are considered equal to each other
-# etc.
-#
-# These do not currently affect the correctness of output. To fix these issues,
-# and others marked as TODO in this module, it would probably be best to start
-# over and apply type checking/inference to the Fluent AST nodes, which would
-# probably be a lot simpler, and if needed do very basic tracking of types on
-# the Elm AST nodes (which will all be fully known by that point). Some of the
-# functions in here that generated Elm type signatures will still be needed in
-# some form.
+# This module provides help with basic type checking/tracking for the
+# codegen.ElmAst objects, plus the ability to generate type signatures.
 
 
 def with_auto_env(meth):
@@ -69,17 +27,6 @@ class SignatureEnv(object):
 
 
 class ElmType(object):
-    def constrain(self, other):
-        """
-        Constrain the other type to be compatible with (equal to or more specific
-        than) self May return a new object, other unchanged, or other mutated.
-        (TODO - would be cleaner if it never mutated, only returned new
-        objects).
-
-        """
-        raise NotImplementedError(
-            "{0} needs to implement 'constrain'".format(self.__class__)
-        )
 
     def apply_args(self, args):
         if len(args) > 0:
@@ -98,16 +45,13 @@ class ElmType(object):
 
 
 class UnconstrainedType(ElmType):
-    def constrain(self, other):
-        return other
-
     @with_auto_env
     def as_signature(self, from_module, env=None):
         # This fails if we reach 'z', which is unlikely
         if not env.used_type_variables:
             retval = "a"
         else:
-            retval = six.unichr(max(map(ord, env.used_type_variables)) + 1)
+            retval = chr(max(map(ord, env.used_type_variables)) + 1)
         env.used_type_variables[retval] = self
         return retval
 
@@ -118,12 +62,6 @@ class UnconstrainedType(ElmType):
 class TypeParam(UnconstrainedType):
     def __init__(self, preferred_name):
         self.preferred_name = preferred_name
-
-    def constrain(self, other):
-        if isinstance(other, UnconstrainedType):
-            return self
-        else:
-            return other
 
     @with_auto_env
     def as_signature(self, from_module, env=None):
@@ -178,14 +116,14 @@ class Type(ElmType):
             constructors = []
 
         for c in constructors:
-            if isinstance(c, six.text_type):
+            if isinstance(c, str):
                 name = c
                 params = ()
                 constructor_type = self
             else:
                 name, params = c[0], tuple(c[1:])
                 params = [
-                    self.param_dict[p] if isinstance(p, six.text_type) else p
+                    self.param_dict[p] if isinstance(p, str) else p
                     for p in params
                 ]
                 constructor_type = Function.for_multiple_inputs(params, self)
@@ -232,24 +170,6 @@ class Type(ElmType):
     def signature_sub_types(self):
         return self.param_dict.values()
 
-    def constrain(self, other):
-        if isinstance(other, UnconstrainedType):
-            return self
-        if not self._is_compatible(other):
-            raise exceptions.TypeMismatch(
-                "{0} is not compatible with {1}".format(self, other)
-            )
-        diff_params = {
-            n: p
-            for n, p in self.param_dict.items()
-            if other.param_dict[n] != self.param_dict[n]
-        }
-        if diff_params:
-            retval = other.specialize(**diff_params)
-        else:
-            retval = self
-        return retval
-
     def specialize(self, **params):
         retval = self.clone()
         for name, type_obj in params.items():
@@ -257,7 +177,7 @@ class Type(ElmType):
                 raise LookupError(
                     "{0} is not a parameter of type {1}".format(name, self)
                 )
-            retval.param_dict[name] = type_obj.constrain(self.param_dict[name])
+            retval.param_dict[name] = type_obj
         return retval
 
     def clone(self):
@@ -271,18 +191,13 @@ class Type(ElmType):
 class Tuple(Type):
     def __init__(self, *param_types):
         type_params = [
-            TypeParam(six.unichr(ord("a") + i)) for i in range(len(param_types))
+            TypeParam(chr(ord("a") + i)) for i in range(len(param_types))
         ]
         super(Tuple, self).__init__(
             "Tuple", None, params=type_params, reserve_names=False
         )
         for type_param, param_type in zip(type_params, param_types):
             self.param_dict[type_param.preferred_name] = param_type
-
-    def clone(self):
-        retval = self.__class__(self.name)
-        retval.param_dict.update(self.param_dict)
-        return retval
 
     @with_auto_env
     def as_signature(self, from_module, env=None):
@@ -300,37 +215,6 @@ def type_paren_wrap(sig):
         return sig
 
 
-@attr.s
-class TypeSource(object):
-    ftl_source = attr.ib()
-    type_obj = attr.ib()
-
-
-@attr.s
-class UniqueList(object):
-    _items = attr.ib(factory=list)
-
-    def append(self, item):
-        if item not in self._items:
-            self._items.append(item)
-
-    def extend(self, other):
-        for s in other:
-            self.append(s)
-
-    def __iter__(self):
-        return iter(self._items)
-
-    def __bool__(self):
-        return bool(self._items)
-
-    def __len__(self):
-        return len(self._items)
-
-    def __getitem__(self, idx):
-        return self._items[idx]
-
-
 class Record(ElmType):
     def __init__(self, **fields):
         """
@@ -342,67 +226,24 @@ class Record(ElmType):
         for name, type_obj in fields.items():
             self.add_field(name, type_obj)
         self.fixed = bool(fields)
-        if not self.fixed:
-            self.field_type_ftl_sources = defaultdict(UniqueList)
 
-    def add_field(self, name, type_obj=None, from_ftl_source=None):
+    def add_field(self, name, type_obj=None, ftl_sources=None):
         """
         Add a field, or set the type for an existing field.
         """
         if type_obj is None:
             type_obj = UnconstrainedType()
         if name in self.fields:
-            if self.fixed:
-                assert type_obj.constrain(self.fields[name])
-            else:
-                if from_ftl_source is not None and type_obj != self.fields[name]:
-                    self.field_type_ftl_sources[name].append(
-                        TypeSource(from_ftl_source, type_obj)
-                    )
-                try:
-                    new_type = type_obj.constrain(self.fields[name])
-                except exceptions.TypeMismatch as e:
-                    raise exceptions.RecordTypeMismatch(
-                        *e.args, record_type=self, field_name=name
-                    )
-                self.fields[name] = new_type
-        else:
-            if self.fixed:
-                raise AssertionError(
-                    "Cannot add field {0} to a fixed record type, only {1} available".format(
-                        name, ", ".join(self.fields.keys())
-                    )
+            # Ideally would assert that types match here, but we don't
+            # have a complete enough model of Elm type system
+            return
+        if self.fixed:
+            raise AssertionError(
+                "Cannot add field {0} to a fixed record type, only {1} available".format(
+                    name, ", ".join(self.fields.keys())
                 )
-            self.fields[name] = type_obj
-            if from_ftl_source is not None:
-                self.field_type_ftl_sources[name].append(TypeSource(from_ftl_source, type_obj))
-
-    def constrain(self, other):
-        if isinstance(other, UnconstrainedType):
-            return self
-
-        if not isinstance(other, Record):
-            raise exceptions.TypeMismatch(
-                "Expected type {0} is not compatible with a record type".format(other)
             )
-
-        if other.fixed:
-            for n in self.fields:
-                if n not in other.fields:
-                    raise exceptions.TypeMismatch(
-                        "Unexpected field {0}, only {1} available".format(
-                            n, ", ".join(self.other.keys())
-                        )
-                    )
-        else:
-            # TODO - it would be cleaner if we were returning a clone here,
-            # but it gets really tricky to re-associate the new object as part
-            # of the type of the codegen.Function objects create.
-            for n, t in self.fields.items():
-                other.field_type_ftl_sources[n].extend(self.field_type_ftl_sources[n])
-                other.add_field(n, t)
-
-        return other
+        self.fields[name] = type_obj
 
     @with_auto_env
     def as_signature(self, from_module, env=None):
@@ -440,15 +281,6 @@ class Function(ElmType):
                 and (self.input_type == other.input_type)
                 and (self.output_type == other.output_type))
 
-    def constrain(self, other):
-        assert isinstance(other, Function), "Expecting {0} to be a Function".format(
-            other
-        )
-        return Function(
-            other.input_type.constrain(self.input_type),
-            other.output_type.constrain(self.output_type),
-        )
-
     @staticmethod
     def for_multiple_inputs(input_types, output_type):
         if len(input_types) == 0:
@@ -471,34 +303,14 @@ class Function(ElmType):
     def signature_sub_types(self):
         return [self.input_type, self.output_type]
 
-    def apply_args(self, args, from_ftl_source=None):
+    def apply_args(self, args, ftl_source=None):
         """
         Returns that type that would remain after the supplied arguments
         (which are expression objects) are applied.
-
-        Also applies type constraints to the args.
         """
         if len(args) == 0:
             return self
-        arg, remainder = args[0], args[1:]
-
-        # 1. Suppose we have a function
-        #  { a | foo : String } -> String
-        # and an empty record type {}.
-        # When we apply the function to the type,
-        # the record type ought to gain a 'foo : String' field
-
-        # 2. Suppose we have a function
-        #  List a -> a
-        # and an input
-        #  List String
-        #
-        # When we apply the function to the type,
-        # the output type should end up as String.
-        #
-        # TODO fix this second case somehow???
-
-        arg.constrain_type(self.input_type, from_ftl_source=from_ftl_source)
+        _, remainder = args[0], args[1:]
         return self.output_type.apply_args(remainder)
 
 
@@ -516,3 +328,12 @@ def signature_traverse(type_obj):
         for t in signature_traverse(part):
             yield t
     yield type_obj
+
+
+class ConflictType(Type):
+    @with_auto_env
+    def as_signature(self, from_module, env=None):
+        return "COMPILATION ERROR"
+
+
+Conflict = ConflictType("(conflicted-type)", dummy_module)  # Sentinel value

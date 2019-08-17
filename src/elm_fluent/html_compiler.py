@@ -4,14 +4,10 @@ HTML specific compilation functions
 import re
 
 import bs4
-import six
 from fluent.syntax import ast
 
 from elm_fluent import codegen
 from elm_fluent.stubs import defaults as dtypes, html, html_attributes
-
-text_type = six.text_type
-string_types = six.string_types
 
 html_output_type = dtypes.List.specialize(a=html.Html)
 
@@ -36,14 +32,14 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
     items = []
     for node in nodes:
         if isinstance(node, bs4.element.NavigableString):
-            parts = interpolate_replacements(text_type(node), expr_replacements)
+            parts = interpolate_replacements(str(node), expr_replacements)
             for part in parts:
-                if isinstance(part, string_types):
+                if isinstance(part, str):
                     items.append(
                         HtmlList(
                             [
                                 local_scope.variables["Html.text"].apply(
-                                    codegen.String(text_type(part))
+                                    codegen.String(str(part))
                                 )
                             ]
                         )
@@ -55,7 +51,7 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
                         items.append(val)
                     else:
                         val = local_scope.variables["Html.text"].apply(
-                            compiler.Stringable(val, local_scope)
+                            compiler.render_to_string(val, local_scope, compiler_env)
                         )
                         items.append(HtmlList([val]))
         else:
@@ -73,19 +69,17 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
                 )
                 attr_output_parts = []
                 for part in attr_value_parts:
-                    if isinstance(part, string_types):
-                        attr_output_parts.append(codegen.String(text_type(part)))
+                    if isinstance(part, str):
+                        attr_output_parts.append(codegen.String(str(part)))
                     else:
                         with compiler_env.modified(html_context=False):
                             attr_output_parts.append(
-                                compiler.Stringable(
+                                compiler.render_to_string(
                                     compiler.compile_expr(
                                         part, local_scope, compiler_env
                                     ),
                                     local_scope,
-                                    from_ftl_source=compiler.make_ftl_source(
-                                        part, compiler_env
-                                    ),
+                                    compiler_env,
                                 )
                             )
 
@@ -225,7 +219,7 @@ def get_selectors_for_node(node, expr_replacements):
 
     def is_static_only(attr_value):
         parts = interpolate_replacements(attr_value, expr_replacements)
-        return all(isinstance(p, string_types) for p in parts)
+        return all(isinstance(p, str) for p in parts)
 
     classes = node.attrs.get("class", [])
     if is_static_only(" ".join(classes)):

@@ -65,8 +65,12 @@ class StandardLayoutMixin(object):
                          {p: c.rstrip() for p, c in files.items()})
 
     def run_main(self, args=None):
-        return self.runner.invoke(cli.main,
-                                  args=[] if args is None else args)
+        result = self.runner.invoke(cli.main,
+                                    args=[] if args is None else args)
+        if result.exception is not None and not isinstance(result.exception, SystemExit):
+            exc_info = result.exc_info
+            raise exc_info[0].with_traceback(exc_info[1], exc_info[2])
+        return result
 
 
 class TestCreate(StandardLayoutMixin, unittest.TestCase):
@@ -104,6 +108,44 @@ class TestCreate(StandardLayoutMixin, unittest.TestCase):
             '''),
         })
 
+    def test_html_with_args(self):
+        # Testing the master file for both argument inference and HTML sigs etc.
+        self.write_ftl_file("locales/en/foo.ftl", """
+            hello-html = Hello { $name }
+        """)
+        result = self.run_main()
+        assert result.output.strip() == ""
+        self.assertFileSystemEquals(self.output_fs, {
+            '/Ftl/EN/Foo.elm': dedent_source('''
+            module Ftl.EN.Foo exposing (helloHtml)
+
+            import Html as Html
+            import Intl.Locale as Locale
+
+            helloHtml : Locale.Locale -> { a | name : String } -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            helloHtml locale_ args_ attrs_ =
+                [ Html.text (String.concat [ "Hello "
+                                           , args_.name
+                                           ])
+                ]
+            '''),
+            '/Ftl/Translations/Foo.elm': dedent_source('''
+            module Ftl.Translations.Foo exposing (helloHtml)
+
+            import Ftl.EN.Foo as EN
+            import Html as Html
+            import Intl.Locale as Locale
+
+            helloHtml : Locale.Locale -> { a | name : String } -> List (String, List (Html.Attribute msg)) -> List (Html.Html msg)
+            helloHtml locale_ args_ attrs_ =
+                case String.toLower (Locale.toLanguageTag locale_) of
+                    "en" ->
+                        EN.helloHtml locale_ args_ attrs_
+                    _ ->
+                        EN.helloHtml locale_ args_ attrs_
+            '''),
+        })
+
 
 class TestErrors(StandardLayoutMixin, unittest.TestCase):
 
@@ -117,16 +159,15 @@ class TestErrors(StandardLayoutMixin, unittest.TestCase):
                  but line 2 has { DATETIME($arg) }
         """)
         result = self.run_main()
-        self.assertEqual(result.output.strip(), """
+        assert result.output.strip() == """
 Errors:
 
-locales/en/foo.ftl:3:23: In message 'foo': FluentDate is not compatible with FluentNumber number
-  Explanation: incompatible types were detected for message argument '$arg'
+locales/en/foo.ftl:1:1: In message 'foo': Conflicting inferred types for argument '$arg'
   Compare the following:
-    locales/en/foo.ftl:2:19: Inferred type: FluentNumber number
-    locales/en/foo.ftl:3:23: Inferred type: FluentDate
+    locales/en/foo.ftl:2:19: Inferred type: Number
+    locales/en/foo.ftl:3:23: Inferred type: DateTime
 Aborted!
-""".strip())
+""".strip()
         self.assertFileSystemEquals(self.output_fs, {})
 
     def test_incompatible_types_between_messages(self):
@@ -140,13 +181,13 @@ Aborted!
         assert result.output.strip() == """
 Errors:
 
-locales/en/foo.ftl:3:43: In message 'we-have': String is not compatible with FluentNumber number
-  Explanation: incompatible types were detected for message argument '$items'
+locales/en/foo.ftl:3:1: In message 'we-have': Conflicting inferred types for argument '$items'
   Compare the following:
-    locales/en/foo.ftl:3:20: Inferred type: FluentNumber number
-    locales/en/foo.ftl:1:21: Inferred type: String
+    locales/en/foo.ftl:3:20: Inferred type: Number
+    locales/en/foo.ftl:3:43: Inferred type: String
+    locales/en/foo.ftl:1:23: Inferred type: String
 
-  Hint: You may need to use NUMBER() or DATETIME() builtins to force the correct type
+  Hint: You may need to use NUMBER() or DATETIME() builtins to force the correct type.
 Aborted!
 """.strip()
 
@@ -163,11 +204,11 @@ Aborted!
         assert result.output.strip() == """
 Errors:
 
-locales/en/foo.ftl:4:11: In message 'foo': FluentDate is not compatible with FluentNumber number
-  Explanation: incompatible types were detected for message argument '$count'
+locales/en/foo.ftl:1:1: In message 'foo': Conflicting inferred types for argument '$count'
   Compare the following:
-    locales/en/foo.ftl:2:6: Inferred type: FluentNumber number
-    locales/en/foo.ftl:4:11: Inferred type: FluentDate
+    locales/en/foo.ftl:2:7: Inferred type: Number
+    locales/en/foo.ftl:3:7: Inferred type: Number
+    locales/en/foo.ftl:4:11: Inferred type: DateTime
 Aborted!
 """.strip()
 
@@ -182,12 +223,10 @@ Aborted!
         self.assertEqual(result.output.strip(), """
 Errors:
 
-While trying to compile master 'foo' function:
-  FluentDate is not compatible with FluentNumber number
-  Explanation: incompatible types were detected for message argument '$arg'
+For master 'foo' function: Conflicting inferred types for argument '$arg'
   Compare the following:
-    locales/en/foo.ftl:1:29: Inferred type: FluentNumber number
-    locales/tr/foo.ftl:1:27: Inferred type: FluentDate
+    locales/en/foo.ftl:1:29: Inferred type: Number
+    locales/tr/foo.ftl:1:27: Inferred type: DateTime
 Aborted!
         """.strip())
 
@@ -206,25 +245,103 @@ Aborted!
             bar = message with internal conflict { DATETIME($arg) } { NUMBER($arg) }
         """)
         result = self.run_main()
-        self.assertEqual(result.output.strip(), """
+        assert result.output.strip() == """
 Errors:
 
 locales/en/bar.ftl:2:1: Junk found: Expected token: "}"
-locales/tr/bar.ftl:1:59: In message 'bar': FluentNumber number is not compatible with FluentDate
-  Explanation: incompatible types were detected for message argument '$arg'
+locales/tr/bar.ftl:1:1: In message 'bar': Conflicting inferred types for argument '$arg'
   Compare the following:
-    locales/tr/bar.ftl:1:40: Inferred type: FluentDate
-    locales/tr/bar.ftl:1:59: Inferred type: FluentNumber number
+    locales/tr/bar.ftl:1:40: Inferred type: DateTime
+    locales/tr/bar.ftl:1:59: Inferred type: Number
 Locale 'en' - Message 'bar' missing
 Locale 'tr' - Message 'valid' missing
-While trying to compile master 'foo' function:
-  FluentDate is not compatible with FluentNumber number
-  Explanation: incompatible types were detected for message argument '$arg'
+For master 'foo' function: Conflicting inferred types for argument '$arg'
   Compare the following:
-    locales/en/foo.ftl:1:29: Inferred type: FluentNumber number
-    locales/tr/foo.ftl:1:27: Inferred type: FluentDate
+    locales/en/foo.ftl:1:29: Inferred type: Number
+    locales/tr/foo.ftl:1:27: Inferred type: DateTime
 Aborted!
-        """.strip())
+        """.strip()
+
+    def test_nested_function_type_mismatch(self):
+        self.write_ftl_file("locales/en/foo.ftl", """
+            foo = { NUMBER(DATETIME(NUMBER($arg))) }
+        """)
+        result = self.run_main()
+        assert result.output.strip() == """
+Errors:
+
+locales/en/foo.ftl:1:16: In message 'foo': DATETIME() expected date argument, found 'FluentNumber number'
+locales/en/foo.ftl:1:9: In message 'foo': NUMBER() expected numeric argument, found 'FluentDate'
+Aborted!
+        """.strip()
+
+    def test_function_call_with_nonexistent_keyword_arg(self):
+        self.write_ftl_file("locales/en/foo.ftl", """
+            foo = { NUMBER(123, foo: 1) }
+        """)
+        result = self.run_main()
+        assert result.output.strip() == """
+Errors:
+
+locales/en/foo.ftl:1:21: In message 'foo': NUMBER() got an unexpected keyword argument 'foo'
+Aborted!
+        """.strip()
+
+    def test_function_call_with_badly_typed_keyword_arg(self):
+        self.write_ftl_file("locales/en/foo.ftl", """
+            foo = { NUMBER(123, useGrouping: "hello") }
+        """)
+        result = self.run_main()
+        assert result.output.strip() == """
+Errors:
+
+locales/en/foo.ftl:1:34: In message 'foo': Expecting a number (0 or 1) for useGrouping parameter, got "hello"
+Aborted!
+        """.strip()
+
+    def test_function_call_with_bad_enum_keyword_arg(self):
+        self.write_ftl_file("locales/en/foo.ftl", """
+            foo = { NUMBER(123, currencyDisplay: "x") }
+        """)
+        result = self.run_main()
+        assert result.output.strip() == """
+Errors:
+
+locales/en/foo.ftl:1:38: In message 'foo': Expecting one of "code", "name", "symbol" for currencyDisplay parameter, got "x"
+Aborted!
+        """.strip()
+
+    def test_function_call_with_bad_positional_arg(self):
+        self.write_ftl_file("locales/en/foo.ftl", """
+            foo = { NUMBER(123, 456) }
+        """)
+        result = self.run_main()
+        assert result.output.strip() == """
+Errors:
+
+locales/en/foo.ftl:1:9: In message 'foo': NUMBER() takes 1 positional argument(s) but 2 were given
+Aborted!
+        """.strip()
+
+    def test_select_mismatch_with_arg(self):
+        self.write_ftl_file("locales/en/foo.ftl", """
+            foo = { NUMBER($count) ->
+                [x]   X
+               *[y]   Y
+             }
+        """)
+        result = self.run_main()
+        assert result.output.strip() == """
+Errors:
+
+locales/en/foo.ftl:2:6: In message 'foo': variant key "x" of type 'String' is not compatible with type 'FluentNumber number' of selector
+  Compare to:
+    locales/en/foo.ftl:1:9: NUMBER($count)
+locales/en/foo.ftl:3:6: In message 'foo': variant key "y" of type 'String' is not compatible with type 'FluentNumber number' of selector
+  Compare to:
+    locales/en/foo.ftl:1:9: NUMBER($count)
+Aborted!
+        """.strip()
 
 
 class TestFileSelection(StandardLayoutMixin, unittest.TestCase):

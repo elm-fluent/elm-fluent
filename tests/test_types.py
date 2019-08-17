@@ -48,9 +48,6 @@ class TestTypes(unittest.TestCase):
             class Expr(codegen.Expression):
                 type = type_obj
 
-                def constrain_type(self, type_obj, from_ftl_source=None):
-                    self.type = type_obj
-
             return Expr()
 
         function = types.Function.for_multiple_inputs(
@@ -173,39 +170,10 @@ class TestTypes(unittest.TestCase):
         t = types.Tuple(dtypes.String, dtypes.Number)
         self.assertEqual(t.as_signature(module), "(String, number)")
 
-    # This, or something like it, would require a better type system
-    #
-    # def test_type_parameters_function_application(self):
-    #     source_module = codegen.Module(name="MyModule")
-    #     container_type = types.Type(
-    #         "Container a", source_module, constructors=["Empty", ("Single", "a")]
-    #     )
-    #     Single = source_module.variables["Single"]
-
-    #     # a -> Container a
-    #     function_1 = Single.type
-    #     applied_1 = function_1.apply_args([codegen.Number(1)])
-    #     self.assertEqual(applied_1, container_type.specialize(a=dtypes.Int))
-
-    #     # Container a -> String -> Container a
-    #     function_2 = types.Function.for_multiple_inputs(
-    #         [container_type, dtypes.String], container_type
-    #     )
-    #     applied_2 = function_2.apply_args([codegen.String("")])
-    #     self.assertEqual(applied_2, container_type.specialize(a=dtypes.String))
-
-    #     # Container a -> String -> a
-    #     function_3 = types.Function.for_multiple_inputs(
-    #         [container_type, dtypes.String], container_type.param_dict["a"]
-    #     )
-    #     applied_3 = function_3.apply_args([codegen.String("")])
-    #     self.assertEqual(applied_3, dtypes.String)
-
-    def test_type_parameters_constrain(self):
+    def test_type_parameters_specialize(self):
         source_module = codegen.Module(name="MyModule")
         container_type = types.Type("Container a", source_module)
         specialized = container_type.specialize(a=dtypes.Int)
         specialized2 = container_type.specialize(a=dtypes.Int)
         self.assertEqual(specialized, specialized2)
         self.assertNotEqual(specialized, container_type)
-        self.assertEqual(specialized.constrain(container_type), specialized)
