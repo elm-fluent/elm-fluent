@@ -732,6 +732,12 @@ class TestCompiler(unittest.TestCase):
         )
         self.assertEqual(type_sources[1].type_obj, fluent.FluentDate)
 
+    def test_nested_function_type_mismatch(self):
+        code, errs = compile_messages_to_elm("""
+            foo = { DATETIME(NUMBER($arg)) }
+        """, self.locale)
+        assert len(errs) == 1
+
     def test_message_arg_type_mismatch_across_messsages(self):
         # Should return error gracefully, including info about where the
         # different types were inferred from
