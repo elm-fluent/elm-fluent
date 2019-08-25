@@ -26,7 +26,7 @@ solution (used by apps like Firefox and Thunderbird) into a re-usable
 specification designed specifically for the web.
 
 elm-fluent is a full implementation of this specification for Elm (see the
-`change log <https://elm-fluent.readthedocs.io/en/latest/history.html>`_ for exact 
+`change log <https://elm-fluent.readthedocs.io/en/latest/history.html>`_ for exact
 version support).
 
 It operates as a command line tool that compiles ``.ftl`` files to ``.elm``
@@ -64,19 +64,15 @@ Status
   <https://github.com/vanwagonet/elm-intl>`_ which has proved ideal for our
   usage, but the core team apparently `quickly dismissed
   <https://discourse.elm-lang.org/t/state-of-localization-l10n-and-v0-19/1541/18>`_
-  adoption of a library like that. It has been difficult to discuss this
-  properly on Elm forums because of the core team's propensity to `close
-  threads without allowing replies to their posts
-  <https://discourse.elm-lang.org/t/state-of-localization-l10n-and-v0-19/1541/19>`_
-  which makes progress difficult.
+  adoption of a library like that.
 
   In light of this, and other problems caused by the restriction on native
   modules in 0.19, the author of elm-fluent may well be forced to move away from
-  Elm. In this event the most likely outcome is a migration to `Reason
-  <https://reasonml.github.io/>`_ + `bucklescript
-  <https://bucklescript.github.io/>`_ and elm-fluent will be forked to target
-  that platform instead. This repo will not be deleted but further development
-  will likely stop.
+  Elm. In this event the most likely outcome is a migration to `bucklescript
+  <https://bucklescript.github.io/>`_ with `bucklescript-tea
+  <https://github.com/OvermindDL1/bucklescript-tea>`_ and elm-fluent will be
+  forked to target that platform instead. This repo will not be deleted but
+  further development will likely stop.
 
 * Free software: MIT license
 
