@@ -6,7 +6,7 @@ elm-fluent
 .. image:: https://img.shields.io/pypi/v/elm_fluent.svg
         :target: https://pypi.org/project/elm-fluent/
 
-.. image:: https://img.shields.io/travis/elm-fluent/elm-fluent.svg
+.. image:: https://travis-ci.org/elm-fluent/elm-fluent.svg?branch=master
         :target: https://travis-ci.org/elm-fluent/elm-fluent
 
 .. image:: https://codecov.io/gh/elm-fluent/elm-fluent/branch/master/graph/badge.svg
