@@ -4,7 +4,7 @@ Utilities for doing Python code generation
 import contextlib
 import re
 
-from elm_fluent import types
+from . import types
 
 # This module provides simple utilities for building up Elm source code. It
 # implements only what is really needed by compiler.py, with a number of aims

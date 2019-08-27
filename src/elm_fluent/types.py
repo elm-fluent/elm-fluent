@@ -93,8 +93,6 @@ class Type(ElmType):
            tuple of (string, types...) - for constructors with type parameters
         """
 
-        from . import codegen
-
         if " " in full_name:
             assert (
                 params is None
@@ -135,6 +133,7 @@ class Type(ElmType):
                 )
 
             if module.is_default_imports:
+                from . import codegen
                 # For builtins, we attach a name to self for easy access.
                 attr_name = name
                 # For 'True', 'False' etc, we have to avoid a clash with Python keywords.
