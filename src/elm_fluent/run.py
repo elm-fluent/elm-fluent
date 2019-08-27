@@ -92,6 +92,7 @@ def run_compile(options):
         )
 
     stems = find_all_ftl_stems(options.locales_fs, options.locales_dir, options.include, locales)
+    stems.sort()
     finalizers = []
     error_printers = []
     warning_printers = []
