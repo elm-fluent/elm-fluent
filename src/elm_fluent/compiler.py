@@ -1032,32 +1032,26 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
         return case_expr
 
 
-def resolve_select_expression_statically(select_expr, key_ast, block, compiler_env):
+def resolve_select_expression_statically(select_expr, selector_ast, block, compiler_env):
     """
     Resolve a select expression statically, given a codegen.ElmAst object
-    `key_ast` representing the key value, or return None if not possible.
+    `selector_ast` representing the key value, or return None if not possible.
     """
     # We need to 'peek' inside what we've produce so far to see if it is something
     # static. To do that reliably we must simplify at this point:
-    key_ast = codegen.simplify(key_ast)
-    # TODO - rewrite this so it take Fluent AST instead of ElmAst as key_ast parameter,
-    # so that this mixture of AST types is not necessary
-
-    key_is_default = isinstance(key_ast, Default)
-    # TODO - is_NUMBER_function_call doesn't work
-    key_is_number = isinstance(key_ast, codegen.Number) or (
-        is_NUMBER_function_call(key_ast) and isinstance(key_ast.args[0], codegen.Number)
-    )
-    key_is_string = isinstance(key_ast, codegen.String)
-    if not (key_is_string or key_is_number or key_is_default):
+    selector_ast = codegen.simplify(selector_ast)
+    selector_is_default = isinstance(selector_ast, Default)
+    selector_is_number = isinstance(selector_ast, codegen.Number)
+    selector_is_string = isinstance(selector_ast, codegen.String)
+    if not (selector_is_string or selector_is_number or selector_is_default):
         return None
 
-    if key_is_number:
-        if isinstance(key_ast, codegen.Number):
-            key_number_value = key_ast.number
+    if selector_is_number:
+        if isinstance(selector_ast, codegen.Number):
+            key_number_value = selector_ast.number
         else:
             # peek into the number literal inside the `NUMBER` call.
-            key_number_value = key_ast.args[0].number
+            key_number_value = selector_ast.args[0].number
 
     default_variant = None
     found = None
@@ -1066,17 +1060,17 @@ def resolve_select_expression_statically(select_expr, key_ast, block, compiler_e
     for variant in select_expr.variants:
         if variant.default:
             default_variant = variant
-            if key_is_default:
+            if selector_is_default:
                 found = variant
                 break
-        if key_is_string:
+        if selector_is_string:
             if (
                 isinstance(variant.key, ast.Identifier)
-                and key_ast.string_value == variant.key.name
+                and selector_ast.string_value == variant.key.name
             ):
                 found = variant
                 break
-        elif key_is_number:
+        elif selector_is_number:
             if isinstance(
                 variant.key, ast.NumberLiteral
             ) and key_number_value == numeric_to_native(variant.key.value):
@@ -1373,6 +1367,8 @@ class NumberFunction(FluentFunction):
         ftl_source = compiler_env.make_ftl_source(expr)
         assert len(args) == 1
         arg = args[0]
+        if isinstance(arg, Default):
+            return arg
         types_correct = arg.type in (fluent.FluentNumber, dtypes.Number)
         if not types_correct and arg.type != types.Conflict:
             compiler_env.add_current_message_error(
@@ -1427,11 +1423,3 @@ DateTimeFunction = DateTimeFunction()
 NumberFunction = NumberFunction()
 
 FUNCTIONS = {f.name: f for f in [DateTimeFunction, NumberFunction]}
-
-
-def is_NUMBER_function_call(codegen_ast):
-    # TODO fixme this function cannot work.
-    return (
-        isinstance(codegen_ast, codegen.FunctionCall)
-        and codegen_ast.function_name == NumberFunction.name
-    )

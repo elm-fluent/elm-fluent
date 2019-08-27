@@ -1310,6 +1310,41 @@ class TestCompiler(unittest.TestCase):
             """,
         )
 
+    def test_parameterized_terms_numbers_with_function(self):
+        code, errs = compile_messages_to_elm(
+            """
+            -thing = { NUMBER($count) ->
+                  *[1] one thing
+                   [2] two things
+            }
+            thing-no-arg = { -thing }
+            thing-no-arg-alt = { -thing() }
+            thing-one = { -thing(count: 1) }
+            thing-two = { -thing(count: 2) }
+            """,
+            self.locale,
+        )
+        self.assertCodeEqual(
+            code,
+            """
+            thingNoArg : Locale.Locale -> a -> String
+            thingNoArg locale_ args_ =
+                "one thing"
+
+            thingNoArgAlt : Locale.Locale -> a -> String
+            thingNoArgAlt locale_ args_ =
+                "one thing"
+
+            thingOne : Locale.Locale -> a -> String
+            thingOne locale_ args_ =
+                "one thing"
+
+            thingTwo : Locale.Locale -> a -> String
+            thingTwo locale_ args_ =
+                "two things"
+            """,
+        )
+
     def test_parameterized_terms_missing(self):
         code, errs = compile_messages_to_elm(
             """

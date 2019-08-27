@@ -61,9 +61,6 @@ class InferenceEnvironment:
             messages_string=self.messages_string
         )
 
-# TODO - introduce `FtlResource` or something to avoid having to pass
-# messages_string and source_filename separately
-
 
 def infer_arg_types(message_dict, sorted_message_ids, source_filename, messages_string):
     """
