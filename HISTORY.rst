@@ -4,6 +4,8 @@ History
 
 0.6.0 (under development)
 -------------------------
+* Big rewrite of the type inference/checking mechanism, with more accurate
+  error messages now.
 
 0.5.0 (2019-08-15)
 ------------------
