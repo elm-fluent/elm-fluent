@@ -1,6 +1,12 @@
 import os.path
 
+import attr
 from fluent.syntax import ast
+
+TERM_SIGIL = "-"
+ATTRIBUTE_SEPARATOR = "."
+
+CLDR_PLURAL_FORMS = set(["zero", "one", "two", "few", "many", "other"])
 
 
 def normpath(fs, path):
@@ -53,3 +59,104 @@ def traverse_ast(node, fun, exclude_attributes=STANDARD_TRAVERSE_EXCLUDE_ATTRIBU
     """
     for subnode in get_ast_nodes(node):
         fun(subnode)
+
+
+@attr.s
+class FtlSource(object):
+    """
+    Bundle of data used to indicate a specific source within an FTL file, down
+    to the expression level.
+    """
+    expr = attr.ib()  # AST node
+    source_filename = attr.ib()  # filename
+    message_id = attr.ib()
+    messages_string = attr.ib()  # complete text
+
+    @property
+    def position(self):
+        return span_to_position(self.expr.span, self.messages_string)
+
+    def expr_as_text(self):
+        return self.messages_string[self.expr.span.start:self.expr.span.end]
+
+    def display_location(self):
+        row, col = self.position
+        return "{0}:{1}:{2}".format(self.source_filename, row, col)
+
+
+def span_to_position(span, source_text):
+    start = span.start
+    relevant = source_text[0:start]
+    row = relevant.count("\n") + 1
+    col = len(relevant) - relevant.rfind("\n")
+    return row, col
+
+
+def reference_to_id(ref):
+    """
+    Returns a string reference for a MessageReference or TermReference
+    AST node.
+
+    e.g.
+       message
+       message.attr
+       -term
+       -term.attr
+    """
+    if isinstance(ref, ast.TermReference):
+        start = TERM_SIGIL + ref.id.name
+    else:
+        start = ref.id.name
+
+    if ref.attribute:
+        return _make_attr_id(start, ref.attribute.name)
+    return start
+
+
+def ast_to_id(ast_obj):
+    """
+    Returns a string reference for a Term or Message
+    """
+    if isinstance(ast_obj, ast.Term):
+        return TERM_SIGIL + ast_obj.id.name
+    return ast_obj.id.name
+
+
+def attribute_ast_to_id(attribute, parent_ast):
+    """
+    Returns a string reference for an Attribute, given Attribute and parent Term or Message
+    """
+    return _make_attr_id(ast_to_id(parent_ast), attribute.id.name)
+
+
+def _make_attr_id(parent_ref_id, attr_name):
+    """
+    Given a parent id and the attribute name, return the attribute id
+    """
+    return "".join([parent_ref_id, ATTRIBUTE_SEPARATOR, attr_name])
+
+
+def get_term_used_variables(term, compiler_env):
+    found_variables = []
+    term_ids_to_ast = compiler_env.term_ids_to_ast
+
+    # We only traverse TermReferences, not MessageReferences, because we
+    # currently don't support calling messages from terms.
+    def finder(node):
+        sub_node = None
+        if isinstance(node, ast.VariableReference):
+            found_variables.append(node.id.name)
+        elif isinstance(node, ast.TermReference):
+            ref = reference_to_id(node)
+            if ref in term_ids_to_ast:
+                sub_node = term_ids_to_ast[ref]
+
+        if sub_node is not None:
+            traverse_ast(sub_node, finder)
+
+    traverse_ast(term, finder)
+    return sorted(set(found_variables))
+
+
+def is_cldr_plural_form_key(key_expr):
+    return isinstance(key_expr, ast.Identifier) and key_expr.name in CLDR_PLURAL_FORMS
