@@ -1345,6 +1345,36 @@ class TestCompiler(unittest.TestCase):
             """,
         )
 
+    def test_parameterized_terms_numbers_with_function_non_static(self):
+        code, errs = compile_messages_to_elm(
+            """
+            -thing = { NUMBER($count, minimumSignificantDigits: 1) ->
+                  *[1] one thing
+                   [2] two things
+            }
+            thing-two = { -thing(count: 2) }
+            """,
+            self.locale,
+        )
+        # We're not smart enough to resolve this statically, but we should
+        # not crash, and we should inline the term.
+        self.assertCodeEqual(
+            code,
+            """
+            thingTwo : Locale.Locale -> a -> String
+            thingTwo locale_ args_ =
+                let
+                    defaults_ = NumberFormat.defaults
+                    fnum_ = Fluent.formattedNumber { defaults_ | locale = locale_, minimumSignificantDigits = Just 1 } 2
+                in
+                    case Fluent.numberValue fnum_ of
+                        2 ->
+                            "two things"
+                        _ ->
+                            "one thing"
+            """,
+        )
+
     def test_parameterized_terms_missing(self):
         code, errs = compile_messages_to_elm(
             """
