@@ -4,11 +4,7 @@ import click
 import language_tags
 
 from . import error_types
-from .compiler import (
-    compile_master,
-    compile_messages,
-    module_name_for_locale,
-)
+from .compiler import compile_master, compile_messages, module_name_for_locale
 from .utils import normpath
 
 

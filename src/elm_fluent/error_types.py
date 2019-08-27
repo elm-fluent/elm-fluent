@@ -1,8 +1,8 @@
 import attr
 
-
 # These error objects are not exceptions that are thrown, therefore we don't
 # inherit from an Exception subclass, and have more freedom.
+
 
 class FluentError:
     # NB not all errors use this base, only the simpler ones

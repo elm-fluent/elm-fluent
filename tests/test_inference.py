@@ -5,7 +5,14 @@ from elm_fluent.compiler import (
     get_processing_order,
     parse_ftl,
 )
-from elm_fluent.inference import DateTime, InferredType, Number, String, infer_arg_types, Conflict
+from elm_fluent.inference import (
+    Conflict,
+    DateTime,
+    InferredType,
+    Number,
+    String,
+    infer_arg_types,
+)
 from elm_fluent.utils import FtlSource
 
 from .utils import dedent_ftl

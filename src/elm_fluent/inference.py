@@ -4,7 +4,7 @@ from functools import singledispatch
 import attr
 from fluent.syntax import ast
 
-from .utils import FtlSource, get_ast_nodes, reference_to_id, is_cldr_plural_form_key
+from .utils import FtlSource, get_ast_nodes, is_cldr_plural_form_key, reference_to_id
 
 
 @attr.s(frozen=True)
