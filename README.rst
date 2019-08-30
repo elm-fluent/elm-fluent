@@ -3,8 +3,8 @@ elm-fluent
 ==========
 
 
-.. image:: https://img.shields.io/pypi/v/elm_fluent.svg
-        :target: https://pypi.org/project/elm-fluent/
+.. image:: https://badge.fury.io/py/elm-fluent.svg
+    :target: https://badge.fury.io/py/elm-fluentt/
 
 .. image:: https://travis-ci.org/elm-fluent/elm-fluent.svg?branch=master
         :target: https://travis-ci.org/elm-fluent/elm-fluent
