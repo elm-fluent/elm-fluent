@@ -17,19 +17,31 @@ elm-fluent
         :alt: Documentation Status
 
 
-elm-fluent is a `Fluent <https://projectfluent.org/>`_ implementation for Elm.
+elm-fluent is an internationalization/localization solution for Elm.
 
-Fluent is a next-generation translation/localization solution, designed by the
-folks at Mozilla, based on many years of experience with localizing into a large
-number of different languages. Mozilla have extracted parts of their 'l20n'
-solution (used by apps like Firefox and Thunderbird) into a re-usable
-specification designed specifically for the web.
+It features:
 
-elm-fluent is a full implementation of this specification for Elm (see the
-`change log <https://elm-fluent.readthedocs.io/en/latest/history.html>`_ for exact
-version support).
+- A full implementation of `Fluent - Mozilla's brilliant next generation translation/internationalization/localization system <https://projectfluent.org/>`_.
+- A compiler approach that means you get excellent performance.
+- Proper support for the classic 'plurals' problem in i18n, along with other i18n issues.
+- Compile-time checking of every possible syntax or type error in your Fluent FTL files, by leveraging
+  both Elm's type system and our own checks.
+- Built-in ability to format numbers and dates according to locale, with ability to customize.
+  This means **strongly-typed messages and substitutions** that help you avoid i18n issues
+  you might not even know exist.
+- An elegant solution for the thorny problem of internationalizing messages that contain
+  HTML fragments (such as bold text and hyperlinks), while also allowing such
+  elements to work as normal in Elm's event model (e.g. clickable links that send
+  Elm messages).
+- Excellent, explicit compile-time error messages - inspired by the Elm compiler.
+  
+It's pretty awesome, combining both the power of Fluent and Elm's you-just-cant-break-it
+safety.
 
-It operates as a command line tool that compiles ``.ftl`` files to ``.elm``
+Oveview
+-------
+
+elm-fluent operates as a command line tool that compiles ``.ftl`` files to ``.elm``
 files. The result is that each message becomes a function that will generate a
 translated string (or HTML fragment) for a given locale and an optional set of
 strongly typed parameters (string, dates or numbers).
@@ -48,11 +60,11 @@ Discourse Fluent category <https://discourse.mozilla.org/c/fluent>`_.
 Status
 ------
 
-* Rough around the edges, but being used in production. Please see the list of `open issues
-  <https://github.com/elm-fluent/elm-fluent/issues>`_.
-* A pretty complete test suite, and sufficient docs.
-* Good attention to usability in terms of nice error messages.
-* Compatibility: Elm 0.18 only.
+
+* Stable - used in production.
+* A few rough edges - please see the list of `open issues <https://github.com/elm-fluent/elm-fluent/issues>`_.
+* A pretty complete test suite, and a nice set of docs.
+* **Compatibility: Elm 0.18 only**.
 
   Elm 0.19 is problematic - we require a wrapper for `Intl
   <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl>`_,
