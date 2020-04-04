@@ -35,8 +35,8 @@ It features:
   Elm messages).
 - Excellent, explicit compile-time error messages - inspired by the Elm compiler.
   
-It's pretty awesome, combining both the power of Fluent and Elm's you-just-cant-break-it
-safety.
+It combines the power of Fluent with Elm's you-just-cant-break-it safety to give
+a very capable i18n solution.
 
 Oveview
 -------
@@ -59,7 +59,6 @@ Discourse Fluent category <https://discourse.mozilla.org/c/fluent>`_.
 
 Status
 ------
-
 
 * Stable - used in production.
 * A few rough edges - please see the list of `open issues <https://github.com/elm-fluent/elm-fluent/issues>`_.
