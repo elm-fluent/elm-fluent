@@ -1,5 +1,6 @@
 """
-Utilities for doing Python code generation
+Utilities for doing Elm code generation.
+Type signatures are handled by types.py
 """
 import contextlib
 import re

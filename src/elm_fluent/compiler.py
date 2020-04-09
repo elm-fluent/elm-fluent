@@ -434,7 +434,9 @@ def combine_arg_types_master(locale_message_arg_types, message_id):
     """
     errors = []
     combined = defaultdict(list)
-    for locale, messages_arg_types in locale_message_arg_types.items():
+    locales = sorted(locale_message_arg_types.keys())
+    for locale in locales:
+        messages_arg_types = locale_message_arg_types[locale]
         if message_id not in messages_arg_types:
             continue
         arg_types = messages_arg_types[message_id]  # {arg_name: arg_type}
