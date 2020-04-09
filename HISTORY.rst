@@ -2,8 +2,8 @@
 History
 =======
 
-0.6.0 (under development)
--------------------------
+0.6.0 (2020-04-09)
+------------------
 * Big rewrite of the type inference/checking mechanism, with more accurate
   error messages now.
 
