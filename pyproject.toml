@@ -1,6 +1,6 @@
 [project]
 name = "elm-fluent"
-version = "0.6.0"
+version = "0.7.0"
 description = "Fluent i18n solution for Elm"
 readme = "README.rst"
 authors = [

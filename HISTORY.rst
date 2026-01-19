@@ -2,7 +2,7 @@
 History
 =======
 
-0.7.0 (2026-??-??)
+0.7.0 (2026-01-19)
 ------------------
 * Dropped official support for Python < 3.10, added official support for Python
   3.10 and later.
