@@ -1,7 +1,11 @@
-import contextlib
-from collections import OrderedDict, defaultdict
+from __future__ import annotations
 
-import attr
+import contextlib
+import dataclasses
+from collections import OrderedDict, defaultdict
+from dataclasses import dataclass
+from functools import singledispatch
+
 from fluent.syntax import FluentParser, ast
 
 from . import codegen, error_types, html_compiler, inference, types
@@ -29,12 +33,6 @@ from .utils import (
     traverse_ast,
 )
 
-try:
-    from functools import singledispatch
-except ImportError:
-    # Python < 3.4
-    from singledispatch import singledispatch
-
 # Unicode bidi isolation characters.
 FSI = "\u2068"
 PDI = "\u2069"
@@ -49,29 +47,29 @@ ALL_MESSAGE_FUNCTION_ARGS = [LOCALE_ARG_NAME, MESSAGE_ARGS_NAME, ATTRS_ARG_NAME]
 PLURAL_FORM_FOR_NUMBER_NAME = "plural_form_for_number"
 
 
-@attr.s
+@dataclass
 class CurrentEnvironment:
     # The parts of CompilerEnvironment that we want to mutate (and restore)
     # temporarily for some parts of a call chain.
-    message_id = attr.ib(default=None)
-    term_args = attr.ib(default=None)
-    html_context = attr.ib(default=False)
+    message_id: str
+    term_args: dict | None = None
+    html_context: bool = False
 
 
-@attr.s
+@dataclass
 class CompilerEnvironment:
-    locale = attr.ib()
-    use_isolating = attr.ib()
-    message_mapping = attr.ib(factory=dict)
-    errors = attr.ib(factory=list)
-    functions = attr.ib(factory=dict)
-    message_ids_to_ast = attr.ib(factory=dict)
-    term_ids_to_ast = attr.ib(factory=dict)
-    source_filename = attr.ib(default=None)
-    messages_string = attr.ib(default=None)
-    message_arg_types = attr.ib(default=None)
-    dynamic_html_attributes = attr.ib(default=True)
-    current = attr.ib(factory=CurrentEnvironment)
+    locale: str
+    use_isolating: bool
+    current: CurrentEnvironment
+    message_mapping: dict = dataclasses.field(default_factory=dict)
+    errors: list = dataclasses.field(default_factory=list)
+    functions: dict = dataclasses.field(default_factory=dict)
+    message_ids_to_ast: dict = dataclasses.field(default_factory=dict)
+    term_ids_to_ast: dict = dataclasses.field(default_factory=dict)
+    source_filename: str | None = None
+    messages_string: str | None = None
+    message_arg_types: dict | None = None
+    dynamic_html_attributes: bool = True
 
     def add_current_message_error(self, error, exprs):
         for expr in exprs:
@@ -87,7 +85,10 @@ class CompilerEnvironment:
         # CurrentEnvironment only has immutable args at the moment, so the
         # shallow copy returned by attr.evolve is fine.
         old_current = self.current
-        self.current = attr.evolve(old_current, **replacements)
+        if old_current is None:
+            self.current = CurrentEnvironment(**replacements)
+        else:
+            self.current = dataclasses.replace(old_current, **replacements)
         yield self
         self.current = old_current
 
@@ -163,6 +164,7 @@ def compile_messages(
         messages_string=messages_string,
         dynamic_html_attributes=dynamic_html_attributes,
         message_arg_types=None,  # later
+        current=None,  # we'll fix this later
     )
     module_imports = [
         (intl_locale.module, "Locale"),
@@ -1007,7 +1009,7 @@ def compile_expr_identifier(name, local_scope, compiler_env):
 
 
 @compile_expr.register(ast.VariableReference)
-def compile_expr_variable_reference(argument, local_scope, compiler_env):
+def compile_expr_variable_reference(argument, local_scope, compiler_env: CompilerEnvironment):
     name = argument.id.name
 
     if compiler_env.current.term_args is not None:

@@ -2,29 +2,30 @@
 
 import os.path
 import time
+from dataclasses import dataclass
+from typing import Literal
 
-import attr
 import click
 import watchdog.events
 import watchdog.observers
 from fs.osfs import OSFS
 
 from . import __version__
-from .run import ErrorWhenMissing, FallbackToDefaultLocaleWhenMissing, run_compile
+from .run import ErrorWhenMissing, FallbackToDefaultLocaleWhenMissing, MissingTranslationStrategy, run_compile
 from .utils import normpath
 
 
-@attr.s
+@dataclass
 class CompilationOptions:
-    locales_fs = attr.ib()
-    output_fs = attr.ib()
-    locales_dir = attr.ib()
-    output_dir = attr.ib()
-    include = attr.ib()
-    default_locale = attr.ib()
-    missing_translation_strategy = attr.ib()
-    use_isolating = attr.ib()
-    verbose = attr.ib(default=False)
+    locales_fs: OSFS
+    output_fs: OSFS
+    locales_dir: str
+    output_dir: str
+    include: str
+    default_locale: str
+    missing_translation_strategy: MissingTranslationStrategy
+    use_isolating: bool
+    verbose: bool = False
 
 
 # These functions exist so that we can patch them out when testing. There
@@ -67,15 +68,15 @@ def get_output_fs(path):
 @click.option("--verbose/--quiet", default=False, help="More verbose output")
 @click.option("--version", "version", flag_value=True, help="Print version and exit")
 def main(
-    locales_dir,
-    output_dir,
-    when_missing,
-    default_locale,
-    include,
-    bdi_isolating,
-    watch,
-    verbose,
-    version,
+    locales_dir: str,
+    output_dir: str,
+    when_missing: Literal["error", "fallback"],
+    default_locale: str,
+    include: str,
+    bdi_isolating: bool,
+    watch: bool,
+    verbose: bool,
+    version: bool,
 ):
     if version:
         click.echo(f"elm-fluent {__version__}")

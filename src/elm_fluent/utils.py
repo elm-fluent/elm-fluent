@@ -1,6 +1,6 @@
 import os.path
+from dataclasses import dataclass
 
-import attr
 from fluent.syntax import ast
 
 TERM_SIGIL = "-"
@@ -63,17 +63,17 @@ def traverse_ast(node, fun, exclude_attributes=STANDARD_TRAVERSE_EXCLUDE_ATTRIBU
         fun(subnode)
 
 
-@attr.s
+@dataclass
 class FtlSource:
     """
     Bundle of data used to indicate a specific source within an FTL file, down
     to the expression level.
     """
 
-    expr = attr.ib()  # AST node
-    source_filename = attr.ib()  # filename
-    message_id = attr.ib()
-    messages_string = attr.ib()  # complete text
+    expr: ast.SyntaxNode
+    source_filename: str
+    message_id: str
+    messages_string: str  # complete text
 
     @property
     def position(self):

@@ -1,4 +1,6 @@
-import attr
+from dataclasses import dataclass
+
+from elm_fluent.inference import Conflict
 
 # These error objects are not exceptions that are thrown, therefore we don't
 # inherit from an Exception subclass, and have more freedom.
@@ -72,12 +74,12 @@ class TermParameterError(FluentError):
     pass
 
 
-@attr.s
+@dataclass
 class ArgumentConflictError:
-    message_id = attr.ib()
-    arg_name = attr.ib()
-    conflict = attr.ib()  # Conflict instance
-    master = attr.ib(default=False)  # True for compiling master function
+    message_id: str
+    arg_name: str
+    conflict: Conflict
+    master: bool = False  # True for compiling master function
 
     def display(self):
         from . import inference

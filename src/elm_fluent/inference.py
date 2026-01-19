@@ -1,15 +1,18 @@
 import contextlib
+import dataclasses
+from dataclasses import dataclass
 from functools import singledispatch
 
-import attr
 from fluent.syntax import ast
+
+from elm_fluent.types import ConflictType
 
 from .utils import FtlSource, get_ast_nodes, is_cldr_plural_form_key, reference_to_id
 
 
-@attr.s(frozen=True)
+@dataclass(frozen=True)
 class Type:
-    name = attr.ib()
+    name: str
 
 
 String = Type("String")
@@ -17,30 +20,31 @@ Number = Type("Number")
 DateTime = Type("DateTime")
 
 
-@attr.s
+@dataclass
 class InferredType:
-    type = attr.ib()
-    evidences = attr.ib(factory=list)  # list of FtlSource
+    type: Type
+    evidences: list[FtlSource] = dataclasses.field(default_factory=list)
 
 
-@attr.s
+@dataclass
 class Conflict:
-    types = attr.ib()  # list of InferredType
-    message_source = attr.ib(default=None)  # FtlSource instance for Message
+    types: list[InferredType]
+    # FtlSource instance for Message
     # message_source can be None when compiling master function
+    message_source: FtlSource | None = None
 
 
-@attr.s
+@dataclass
 class CurrentEnvironment:
-    message_id = attr.ib(default=None)
+    message_id: str | None = None
 
 
-@attr.s
+@dataclass
 class InferenceEnvironment:
-    source_filename = attr.ib()
-    messages_string = attr.ib()
-    known_arg_types = attr.ib()
-    current = attr.ib(factory=CurrentEnvironment)
+    source_filename: str
+    messages_string: str
+    known_arg_types: dict
+    current: CurrentEnvironment = dataclasses.field(default_factory=CurrentEnvironment)
 
     @contextlib.contextmanager
     def modified(self, **replacements):
@@ -49,7 +53,7 @@ class InferenceEnvironment:
         environment, restoring the old data at the end.
         """
         old_current = self.current
-        self.current = attr.evolve(old_current, **replacements)
+        self.current = dataclasses.replace(old_current, **replacements)
         yield self
         self.current = old_current
 
@@ -176,7 +180,7 @@ def infer_select_expression(select_expr, env):
     return retval
 
 
-def combine_inferred_types(inferred_types, message_source):
+def combine_inferred_types(inferred_types, message_source) -> dict[str, InferredType | ConflictType]:
     """
     Given list [(name, InferredType or None)],
     returns a dictionary {name: InferredType or Conflict}
@@ -185,7 +189,7 @@ def combine_inferred_types(inferred_types, message_source):
     """
     # inferred_types may contain lots of distinct evidence for
     # different types.
-    output = {}
+    output: dict[str, InferredType | ConflictType] = {}
     found_names = set()
 
     real_inferred_types = []

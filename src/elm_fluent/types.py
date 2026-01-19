@@ -1,7 +1,9 @@
-from collections import OrderedDict
-from functools import wraps
+from __future__ import annotations
 
-import attr
+import dataclasses
+from collections import OrderedDict
+from dataclasses import dataclass
+from functools import wraps
 
 # This module provides help with basic type checking/tracking for the
 # codegen.ElmAst objects, plus the ability to generate type signatures.
@@ -9,7 +11,7 @@ import attr
 
 def with_auto_env(meth):
     @wraps(meth)
-    def wrapper(self, from_module, env=None):
+    def wrapper(self, from_module, env: SignatureEnv | None = None):
         if env is None:
             env = SignatureEnv()
         return meth(self, from_module, env=env)
@@ -17,13 +19,13 @@ def with_auto_env(meth):
     return wrapper
 
 
-@attr.s
+@dataclass
 class SignatureEnv:
     """
     Environment object for creating type/function signatures
     """
 
-    used_type_variables = attr.ib(factory=dict)
+    used_type_variables: dict[str, ElmType] = dataclasses.field(default_factory=dict)
 
 
 class ElmType:
@@ -41,7 +43,7 @@ class ElmType:
 
 class UnconstrainedType(ElmType):
     @with_auto_env
-    def as_signature(self, from_module, env=None):
+    def as_signature(self, from_module, env: SignatureEnv) -> str:
         # This fails if we reach 'z', which is unlikely
         if not env.used_type_variables:
             retval = "a"
@@ -59,7 +61,7 @@ class TypeParam(UnconstrainedType):
         self.preferred_name = preferred_name
 
     @with_auto_env
-    def as_signature(self, from_module, env=None):
+    def as_signature(self, from_module, env: SignatureEnv):
         for v, t in env.used_type_variables.items():
             if t is self:
                 return v
@@ -213,7 +215,7 @@ class Record(ElmType):
         self.fields[name] = type_obj
 
     @with_auto_env
-    def as_signature(self, from_module, env=None):
+    def as_signature(self, from_module, env: SignatureEnv):
         def fields_signature() -> str:
             return ", ".join(
                 f"{name} : {type_obj.as_signature(from_module, env=env)}"

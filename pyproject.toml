@@ -31,7 +31,6 @@ keywords = [
 ]
 
 dependencies = [
-    "attrs>=18",
     "beautifulsoup4>=4.6.3",
     "click>=6.0",
     "fluent-syntax>=0.15",
