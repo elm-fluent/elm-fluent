@@ -156,6 +156,8 @@ class RunCompileEventHandler(watchdog.events.FileSystemEventHandler):
     def __init__(self, options):
         self.options = options
 
-    def on_any_event(self, event):
+    def on_modified(self, event):
+        if event.is_directory:
+            return
         click.secho("Changes detected, re-running...\n", fg="yellow")
         run_compile_and_ignore_abort(self.options)
