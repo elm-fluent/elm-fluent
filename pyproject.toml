@@ -63,6 +63,8 @@ dev = [
     "pytest>=9.0.2",
     "pyvirtualdisplay>=3.0",
     "selenium>=4.40.0",
+    "tox>=4.34.1",
+    "tox-uv>=1.29.0",
 ]
 
 
