@@ -34,7 +34,7 @@ It features:
   elements to work as normal in Elm's event model (e.g. clickable links that send
   Elm messages).
 - Excellent, explicit compile-time error messages - inspired by the Elm compiler.
-  
+
 It combines the power of Fluent with Elm's you-just-cant-break-it safety to give
 a very capable i18n solution.
 

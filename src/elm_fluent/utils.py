@@ -27,7 +27,9 @@ STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES = {
 STANDARD_TRAVERSE_EXCLUDE_TYPES = {ast.Span}
 
 
-def get_ast_nodes(node, exclude_attributes=STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES, exclude_types=STANDARD_TRAVERSE_EXCLUDE_TYPES):
+def get_ast_nodes(
+    node, exclude_attributes=STANDARD_TRAVERSE_EXCLUDE_ATTRIBUTES, exclude_types=STANDARD_TRAVERSE_EXCLUDE_TYPES
+):
     """
     Yields all nodes in AST tree, postorder traversal
     """
@@ -62,11 +64,12 @@ def traverse_ast(node, fun, exclude_attributes=STANDARD_TRAVERSE_EXCLUDE_ATTRIBU
 
 
 @attr.s
-class FtlSource(object):
+class FtlSource:
     """
     Bundle of data used to indicate a specific source within an FTL file, down
     to the expression level.
     """
+
     expr = attr.ib()  # AST node
     source_filename = attr.ib()  # filename
     message_id = attr.ib()
@@ -77,11 +80,11 @@ class FtlSource(object):
         return span_to_position(self.expr.span, self.messages_string)
 
     def expr_as_text(self):
-        return self.messages_string[self.expr.span.start:self.expr.span.end]
+        return self.messages_string[self.expr.span.start : self.expr.span.end]
 
     def display_location(self):
         row, col = self.position
-        return "{0}:{1}:{2}".format(self.source_filename, row, col)
+        return f"{self.source_filename}:{row}:{col}"
 
 
 def span_to_position(span, source_text):

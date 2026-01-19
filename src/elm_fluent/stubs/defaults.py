@@ -1,6 +1,7 @@
 """
 Types for Elm defaults
 """
+
 from elm_fluent import codegen, types
 
 # Default imports: see http://package.elm-lang.org/packages/elm-lang/core/latest
@@ -109,8 +110,6 @@ Number = types.Type("number", default_imports)
 Bool = types.Type("Bool", default_imports, constructors=["True", "False"])
 
 
-Maybe = types.Type(
-    "Maybe a", default_imports, constructors=["Nothing", ("Just", types.TypeParam("a"))]
-)
+Maybe = types.Type("Maybe a", default_imports, constructors=["Nothing", ("Just", types.TypeParam("a"))])
 
 List = types.Type("List a", default_imports)

@@ -2,6 +2,7 @@
 Utilities for doing Elm code generation.
 Type signatures are handled by types.py
 """
+
 import contextlib
 import re
 
@@ -34,7 +35,7 @@ from . import types
 #    consistent and so can predicted easily.
 
 
-class ElmAst(object):
+class ElmAst:
     def __init__(self, ftl_source=None):
         self.ftl_source = ftl_source
 
@@ -54,9 +55,7 @@ class ElmAst(object):
         """
         Returns an iterable of all syntax nodes contained in this node
         """
-        raise NotImplementedError(
-            "{0} needs to implement sub_expressions".format(self.__class__)
-        )
+        raise NotImplementedError(f"{self.__class__} needs to implement sub_expressions")
 
     def as_source_code(self):
         builder = SourceCodeBuilder()
@@ -64,7 +63,7 @@ class ElmAst(object):
         return builder.render()
 
 
-class Variables(object):
+class Variables:
     def __init__(self, scope):
         self.scope = scope
 
@@ -118,11 +117,7 @@ class Scope(ElmAst):
                 return _add(requested)
             else:
                 if requested in self.all_reserved_names():
-                    raise AssertionError(
-                        "Cannot use '{0}' as argument name as it is already in use".format(
-                            requested
-                        )
-                    )
+                    raise AssertionError(f"Cannot use '{requested}' as argument name as it is already in use")
 
         cleaned = cleanup_name(requested)
 
@@ -147,11 +142,7 @@ class Scope(ElmAst):
         # names for all function arguments in a separate scope, and insist on
         # the exact names
         if name in self.all_reserved_names():
-            raise AssertionError(
-                "Can't reserve '{0}' as function arg name as it is already reserved".format(
-                    name
-                )
-            )
+            raise AssertionError(f"Can't reserve '{name}' as function arg name as it is already reserved")
         self._function_arg_reserved_names.add(name)
 
     def get_type(self, name):
@@ -250,7 +241,7 @@ class Module(Scope):
         self.name = name
 
     def __repr__(self):
-        return "<Module {0}>".format(self.name)
+        return f"<Module {self.name}>"
 
     def all_reserved_names(self):
         return super(Module, self).all_reserved_names() | ELM_KEYWORDS
@@ -277,9 +268,7 @@ class Module(Scope):
         for name, mod in self.import_dict.items():
             if mod == module:
                 return name + "."
-        raise LookupError(
-            "module {0} not found in {1}. Missing 'add_import'?".format(module, self)
-        )
+        raise LookupError(f"module {module} not found in {self}. Missing 'add_import'?")
 
     def add_function(self, func_name, func, expose=True, source_order=None):
         assert func.func_name == func_name
@@ -299,18 +288,14 @@ class Module(Scope):
         lines = []
         if include_module_line:
             assert self.name is not None
-            lines.append(
-                "module {0} exposing ({1})\n".format(self.name, ", ".join(self.exports))
-            )
+            lines.append(f"module {self.name} exposing ({', '.join(self.exports)})\n")
             lines.append("\n")
         if include_imports and self.import_dict:
-            for name, module in sorted(
-                self.import_dict.items(), key=lambda pair: pair[1].name
-            ):
+            for name, module in sorted(self.import_dict.items(), key=lambda pair: pair[1].name):
                 if self.import_is_used(name, module):
                     # We only support 'as' imports, to avoid name conflicts
                     # with functions defined in the module
-                    lines.append("import {0} as {1}\n".format(module.name, name))
+                    lines.append(f"import {module.name} as {name}\n")
             lines.append("\n")
 
         for s in self.sorted_statements():
@@ -386,11 +371,7 @@ class Function(Scope, Statement):
             remaining_function_type = None
         for arg in args:
             if arg in parent_scope.names_in_use():
-                raise AssertionError(
-                    "Can't use '{0}' as function argument name because it shadows other names".format(
-                        arg
-                    )
-                )
+                raise AssertionError(f"Can't use '{arg}' as function argument name because it shadows other names")
             if remaining_function_type is not None:
                 arg_type = remaining_function_type.input_type
                 remaining_function_type = remaining_function_type.output_type
@@ -409,10 +390,7 @@ class Function(Scope, Statement):
             if function_type is None:
                 signature = ""
             else:
-                signature = "{name} : {signature}\n".format(
-                    signature=function_type.as_signature(self.parent_scope),
-                    name=self.func_name,
-                )
+                signature = f"{self.func_name} : {function_type.as_signature(self.parent_scope)}\n"
 
         builder.add_part(signature)
         builder.add_part(self.func_name)
@@ -440,7 +418,7 @@ def resolve_type(type_object_or_name):
 
 
 def fixed_type(type_object_or_name):
-    class FixedType(object):
+    class FixedType:
         _type_object_or_name = type_object_or_name
 
         @property
@@ -450,7 +428,7 @@ def fixed_type(type_object_or_name):
     return FixedType
 
 
-class SourceCodeBuilder(object):
+class SourceCodeBuilder:
     BLOCK_INDENT_SIZE = 4
 
     def __init__(self):
@@ -466,9 +444,7 @@ class SourceCodeBuilder(object):
             self.current_line += indent
         if "\n" in part and part.find("\n") != len(part) - 1:
             raise ValueError(
-                "If you pass '\n' to add_part, it must be at the end of string value. Received {0}".format(
-                    repr(part)
-                )
+                f"If you pass '\n' to add_part, it must be at the end of string value. Received {repr(part)}"
             )
         self.current_line += part
         if self.current_line.endswith("\n"):
@@ -500,9 +476,7 @@ class SourceCodeBuilder(object):
         # TODO - may need a better way to determine when we need parentheses, that
         # respects operator precedence etc. At the moment the following suffices.
         # Operators do wrapping always to be safe.
-        wrapping = not isinstance(
-            expr, (Literal, Bracketing, VariableReference, AttributeReference)
-        )
+        wrapping = not isinstance(expr, (Literal, Bracketing, VariableReference, AttributeReference))
         if wrapping:
             self.add_part("(")
 
@@ -577,9 +551,7 @@ class Let(Expression, Scope):
 
 
 class If(Expression):
-    def __init__(
-        self, condition=None, true_branch=None, false_branch=None, parent_scope=None
-    ):
+    def __init__(self, condition=None, true_branch=None, false_branch=None, parent_scope=None):
         self.condition = condition
         self.true_branch = true_branch or Let(parent_scope=parent_scope)
         self.false_branch = false_branch or Let(parent_scope=parent_scope)
@@ -653,10 +625,7 @@ class Case(Expression):
 
     def simplify(self, changes):
         self.selector = self.selector.simplify(changes)
-        self.branches = [
-            (matcher.simplify(changes), value.simplify(changes))
-            for matcher, value in self.branches
-        ]
+        self.branches = [(matcher.simplify(changes), value.simplify(changes)) for matcher, value in self.branches]
         return self
 
 
@@ -665,7 +634,7 @@ class Literal(Expression):
         return []
 
 
-class Bracketing(object):
+class Bracketing:
     """
     Sentinel class to indicate expression that do their own bracketing
     so don't need extra parenthesis
@@ -680,13 +649,11 @@ class String(fixed_type("String"), Literal):
         self.string_value = string_value
 
     def __repr__(self):
-        return "<String {0}>".format(repr(self.string_value))
+        return f"<String {repr(self.string_value)}>"
 
     def build_source(self, builder):
         # TODO - escapes for other chars?
-        builder.add_part(
-            '"{0}"'.format(self.string_value.replace('"', '\\"').replace("\n", "\\n"))
-        )
+        builder.add_part('"{0}"'.format(self.string_value.replace('"', '\\"').replace("\n", "\\n")))
 
 
 class Number(fixed_type("Number"), Literal):
@@ -731,7 +698,7 @@ class Concat(Expression):
         self.parts = parts
 
     def __repr__(self):
-        return "<Concat {0}>".format(repr(self.parts))
+        return f"<Concat {repr(self.parts)}>"
 
     def sub_expressions(self):
         return self.parts
@@ -742,18 +709,12 @@ class Concat(Expression):
 
     def simplify(self, changes):
         # Simplify sub parts (while eliminating empty)
-        self.parts = [
-            part.simplify(changes) for part in self.parts if not self.is_empty(part)
-        ]
+        self.parts = [part.simplify(changes) for part in self.parts if not self.is_empty(part)]
 
         # Merge adjacent List(like) objects.
         new_parts = []
         for part in self.parts:
-            if (
-                len(new_parts) > 0
-                and isinstance(new_parts[-1], self.literal)
-                and isinstance(part, self.literal)
-            ):
+            if len(new_parts) > 0 and isinstance(new_parts[-1], self.literal) and isinstance(part, self.literal):
                 new_parts[-1] = self.merge_two(new_parts[-1], part)
             else:
                 new_parts.append(part)
@@ -819,7 +780,7 @@ class VariableReference(Expression):
         else:
             definition_scope = scope
         if name not in definition_scope.names_in_use():
-            raise AssertionError("Cannot refer to undefined name '{0}'".format(name))
+            raise AssertionError(f"Cannot refer to undefined name '{name}'")
 
         self._definition_scope = definition_scope
         self.module_name = module_name
@@ -830,16 +791,13 @@ class VariableReference(Expression):
         return self._definition_scope.get_type(self.name)
 
     def build_source(self, builder):
-        builder.add_part(
-            ((self.module_name + ".") if self.module_name is not None else "")
-            + self.name
-        )
+        builder.add_part(((self.module_name + ".") if self.module_name is not None else "") + self.name)
 
     def sub_expressions(self):
         return []
 
     def __repr__(self):
-        return "<VariableReference {0}>".format(self.as_source_code())
+        return f"<VariableReference {self.as_source_code()}>"
 
 
 class AttributeReference(Expression):
@@ -851,9 +809,7 @@ class AttributeReference(Expression):
         self.type = type
 
     def __repr__(self):
-        return "<AttributeReference {0}.{1}>".format(
-            repr(self.variable), self.attribute_name
-        )
+        return f"<AttributeReference {repr(self.variable)}.{self.attribute_name}>"
 
     def build_source(self, builder):
         self.variable.build_source(builder)
@@ -870,14 +826,10 @@ class FunctionCall(Expression):
         super().__init__(ftl_source=ftl_source)
         self.expr = expr
         self.args = args
-        self.type = self.expr.type.apply_args(
-            self.args, ftl_source=ftl_source
-        )
+        self.type = self.expr.type.apply_args(self.args, ftl_source=ftl_source)
 
     def __repr__(self):
-        return "<FunctionCall {0} {1}>".format(
-            self.expr.as_source_code(), " ".join(repr(a) for a in self.args)
-        )
+        return f"<FunctionCall {self.expr.as_source_code()} {' '.join(repr(a) for a in self.args)}>"
 
     def build_source(self, builder):
         self.expr.build_source(builder)
@@ -953,16 +905,10 @@ Add = infix_operator("+", "Number", "Number")
 
 class RecordUpdate(Bracketing, Expression):
     def __init__(self, var, **updates):
-        assert isinstance(
-            var.type, types.Record
-        ), "isinstance({0}, types.Record)".format(var.type)
-        assert isinstance(
-            var, VariableReference
-        ), "isinstance({0}, VariableReference)".format(var)
-        assert (
-            var.module_name is None
-        ), "Record update syntax does not allow qualified name like {0}.{1}".format(
-            var.module_name, var.name
+        assert isinstance(var.type, types.Record), f"isinstance({var.type}, types.Record)"
+        assert isinstance(var, VariableReference), f"isinstance({var}, VariableReference)"
+        assert var.module_name is None, (
+            f"Record update syntax does not allow qualified name like {var.module_name}.{var.name}"
         )
         self.var = var
         self.updates = updates

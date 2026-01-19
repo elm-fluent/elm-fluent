@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import unittest
 
 from elm_fluent import codegen, types
@@ -23,22 +22,16 @@ class TestTypes(unittest.TestCase):
         )
 
         self.assertEqual(
-            types.Function.for_multiple_inputs(
-                [dtypes.String, dtypes.Number], dtypes.Bool
-            ).as_signature(codegen.Module()),
+            types.Function.for_multiple_inputs([dtypes.String, dtypes.Number], dtypes.Bool).as_signature(
+                codegen.Module()
+            ),
             "String -> number -> Bool",
         )
 
     def test_function_eq(self):
-        function1 = types.Function.for_multiple_inputs(
-            [dtypes.String, dtypes.Number], dtypes.String
-        )
-        function2 = types.Function.for_multiple_inputs(
-            [dtypes.String, dtypes.Number], dtypes.String
-        )
-        function3 = types.Function.for_multiple_inputs(
-            [dtypes.Bool, dtypes.Number], dtypes.String
-        )
+        function1 = types.Function.for_multiple_inputs([dtypes.String, dtypes.Number], dtypes.String)
+        function2 = types.Function.for_multiple_inputs([dtypes.String, dtypes.Number], dtypes.String)
+        function3 = types.Function.for_multiple_inputs([dtypes.Bool, dtypes.Number], dtypes.String)
 
         self.assertEqual(function1, function2)
         self.assertNotEqual(function1, function3)
@@ -50,23 +43,17 @@ class TestTypes(unittest.TestCase):
 
             return Expr()
 
-        function = types.Function.for_multiple_inputs(
-            [dtypes.String, dtypes.Number], dtypes.Bool
-        )
+        function = types.Function.for_multiple_inputs([dtypes.String, dtypes.Number], dtypes.Bool)
 
         zero_applied = function.apply_args([])
-        self.assertEqual(
-            zero_applied.as_signature(codegen.Module()), "String -> number -> Bool"
-        )
+        self.assertEqual(zero_applied.as_signature(codegen.Module()), "String -> number -> Bool")
         self.assertEqual(zero_applied, function)
 
         one_applied = function.apply_args([typed_expr(dtypes.String)])
         self.assertEqual(one_applied.as_signature(codegen.Module()), "number -> Bool")
         self.assertEqual(one_applied, types.Function(dtypes.Number, dtypes.Bool))
 
-        two_applied = function.apply_args(
-            [typed_expr(dtypes.String), typed_expr(dtypes.Number)]
-        )
+        two_applied = function.apply_args([typed_expr(dtypes.String), typed_expr(dtypes.Number)])
         self.assertEqual(two_applied.as_signature(codegen.Module()), "Bool")
         self.assertEqual(two_applied, dtypes.Bool)
 
@@ -97,9 +84,7 @@ class TestTypes(unittest.TestCase):
         r = types.Record()
         r.add_field("foo", type_obj=dtypes.String)
         r.add_field("bar")
-        self.assertEqual(
-            r.as_signature(codegen.Module()), "{ a | bar : b, foo : String }"
-        )
+        self.assertEqual(r.as_signature(codegen.Module()), "{ a | bar : b, foo : String }")
 
     def test_one_field_fixed_record_signature(self):
         r = types.Record(foo=dtypes.String)
@@ -111,9 +96,7 @@ class TestTypes(unittest.TestCase):
         r1.add_field("bar")
         r2 = types.Record()
         r2.add_field("baz")
-        function = types.Function.for_multiple_inputs(
-            [r1, r2], types.UnconstrainedType()
-        )
+        function = types.Function.for_multiple_inputs([r1, r2], types.UnconstrainedType())
         self.assertEqual(
             function.as_signature(codegen.Module()),
             "{ a | bar : b, foo : c } -> { d | baz : e } -> f",
@@ -136,21 +119,15 @@ class TestTypes(unittest.TestCase):
         self.assertEqual(dict_type.as_signature(source_module, env=env), "Dict k2 v2")
         dict_type = types.Type("Dict k v", source_module)
         str_to_float_dict = dict_type.specialize(k=dtypes.String, v=dtypes.Float)
-        self.assertEqual(
-            str_to_float_dict.as_signature(source_module), "Dict String Float"
-        )
+        self.assertEqual(str_to_float_dict.as_signature(source_module), "Dict String Float")
 
         container_type = types.Type("Container a", source_module)
         complex_type = container_type.specialize(a=dict_type)
-        self.assertEqual(
-            complex_type.as_signature(source_module), "Container (Dict k v)"
-        )
+        self.assertEqual(complex_type.as_signature(source_module), "Container (Dict k v)")
 
     def test_type_parameters_constructors(self):
         source_module = codegen.Module(name="MyModule")
-        container_type = types.Type(
-            "Container a", source_module, constructors=["Empty", ("Single", "a")]
-        )
+        container_type = types.Type("Container a", source_module, constructors=["Empty", ("Single", "a")])
         self.assertEqual(container_type.as_signature(source_module), "Container a")
         Empty = source_module.variables["Empty"]
         Single = source_module.variables["Single"]

@@ -7,7 +7,7 @@ Release process
 
 * Update the version number, removing the ``.dev1`` part
 
-  * setup.py
+  * pyproject.toml
   * src/elm_fluent/__init__.py
   * docs/conf.py
 

@@ -1,8 +1,10 @@
 """
 Types for Html.Attributes module
 """
+
 from .. import codegen, types
-from . import defaults as dtypes, html
+from . import defaults as dtypes
+from . import html
 
 module = codegen.Module(name="Html.Attributes")
 
@@ -78,7 +80,5 @@ for attr in ATTRIBUTES:
 
 module.reserve_name(
     "attribute",
-    type=types.Function.for_multiple_inputs(
-        [dtypes.String, dtypes.String], html.Attribute
-    ),
+    type=types.Function.for_multiple_inputs([dtypes.String, dtypes.String], html.Attribute),
 )

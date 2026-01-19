@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import unittest
 
 from fluent.syntax import ast
@@ -28,9 +27,7 @@ def compile_messages_to_elm(
         dynamic_html_attributes=dynamic_html_attributes,
     )
     return (
-        module.as_source_code(
-            include_module_line=include_module_line, include_imports=include_imports
-        ),
+        module.as_source_code(include_module_line=include_module_line, include_imports=include_imports),
         errors,
     )
 
@@ -48,9 +45,7 @@ class TestCompiler(unittest.TestCase):
         self.assertEqual(message_function_name_for_msg_id("hello-there"), "helloThere")
         self.assertEqual(message_function_name_for_msg_id("helloThere"), "helloThere")
         self.assertEqual(message_function_name_for_msg_id("hello.foo"), "hello_foo")
-        self.assertEqual(
-            message_function_name_for_msg_id("hello-html.foo"), "helloHtml_foo"
-        )
+        self.assertEqual(message_function_name_for_msg_id("hello-html.foo"), "helloHtml_foo")
 
     def test_single_string_literal(self):
         code, errs = compile_messages_to_elm(
@@ -108,9 +103,12 @@ class TestCompiler(unittest.TestCase):
         self.assertEqual(errs, [])
 
     def test_escapes(self):
-        code, errs = compile_messages_to_elm(r"""
+        code, errs = compile_messages_to_elm(
+            r"""
             escapes = {"    "}stuff{"\u0258}\"\\end"}
-        """, self.locale)
+        """,
+            self.locale,
+        )
         self.assertCodeEqual(
             code,
             r"""
@@ -664,9 +662,7 @@ class TestCompiler(unittest.TestCase):
             self.locale,
         )
         self.assertEqual(errs[0].error_sources[0].message_id, "foo")
-        self.assertEqual(
-            errs[0], error_types.ReferenceError("Unknown function: MISSING")
-        )
+        self.assertEqual(errs[0], error_types.ReferenceError("Unknown function: MISSING"))
 
     def test_function_call_with_nonexistent_keyword_arg(self):
         code, errs = compile_messages_to_elm(
@@ -677,9 +673,7 @@ class TestCompiler(unittest.TestCase):
         )
         assert len(errs) == 1
         assert errs[0].error_sources[0].message_id == "foo"
-        assert errs[0] == error_types.FunctionParameterError(
-            "NUMBER() got an unexpected keyword argument 'foo'"
-        )
+        assert errs[0] == error_types.FunctionParameterError("NUMBER() got an unexpected keyword argument 'foo'")
 
     def test_function_call_with_badly_typed_keyword_arg(self):
         code, errs = compile_messages_to_elm(
@@ -735,9 +729,7 @@ class TestCompiler(unittest.TestCase):
         self.assertEqual(errs[0].error_sources[0].message_id, "foo")
         self.assertEqual(
             errs[0],
-            error_types.FunctionParameterError(
-                "NUMBER() takes 1 positional argument(s) but 2 were given"
-            ),
+            error_types.FunctionParameterError("NUMBER() takes 1 positional argument(s) but 2 were given"),
         )
         self.assertEqual(type(errs[0].error_sources[0].expr), ast.FunctionReference)
 
@@ -766,11 +758,18 @@ class TestCompiler(unittest.TestCase):
         assert len(errs) == 1
 
     def test_nested_function_type_mismatch(self):
-        code, errs = compile_messages_to_elm("""
+        code, errs = compile_messages_to_elm(
+            """
             foo = { NUMBER(DATETIME(NUMBER($arg))) }
-        """, self.locale)
-        assert errs[0] == error_types.TypeMismatch("DATETIME() expected date argument, found 'FluentNumber number'",)
-        assert errs[1] == error_types.TypeMismatch("NUMBER() expected numeric argument, found 'FluentDate'",)
+        """,
+            self.locale,
+        )
+        assert errs[0] == error_types.TypeMismatch(
+            "DATETIME() expected date argument, found 'FluentNumber number'",
+        )
+        assert errs[1] == error_types.TypeMismatch(
+            "NUMBER() expected numeric argument, found 'FluentDate'",
+        )
         assert len(errs) == 2
 
     def test_message_arg_type_mismatch_across_messsages(self):
@@ -796,16 +795,16 @@ class TestCompiler(unittest.TestCase):
         assert conflict.types[0] == inference.InferredType(
             type=inference.Number,
             evidences=[
-                FakeFtlSource('foo', 1, 9),
-                FakeFtlSource('bar', 3, 9),
-            ]
+                FakeFtlSource("foo", 1, 9),
+                FakeFtlSource("bar", 3, 9),
+            ],
         )
         assert conflict.types[1] == inference.InferredType(
             type=inference.DateTime,
             evidences=[
-                FakeFtlSource('foo', 1, 17),
-                FakeFtlSource('baz', 5, 9),
-            ]
+                FakeFtlSource("foo", 1, 17),
+                FakeFtlSource("baz", 5, 9),
+            ],
         )
 
     def test_message_arg_type_mismatch_with_string(self):
@@ -829,16 +828,16 @@ class TestCompiler(unittest.TestCase):
         assert conflict.types[0] == inference.InferredType(
             type=inference.String,
             evidences=[
-                FakeFtlSource('foo', 1, 9),
-                FakeFtlSource('bar', 3, 9),
-            ]
+                FakeFtlSource("foo", 1, 9),
+                FakeFtlSource("bar", 3, 9),
+            ],
         )
         assert conflict.types[1] == inference.InferredType(
             type=inference.Number,
             evidences=[
-                FakeFtlSource('foo', 1, 17),
-                FakeFtlSource('baz', 5, 9),
-            ]
+                FakeFtlSource("foo", 1, 17),
+                FakeFtlSource("baz", 5, 9),
+            ],
         )
 
     def test_message_arg_type_mismatch_with_args(self):
@@ -1035,9 +1034,15 @@ class TestCompiler(unittest.TestCase):
 
         code, errs = compile_messages_to_elm(src, self.locale)
         assert errs == [
-            error_types.TypeMismatch('''variant key "x" of type 'String' is not compatible with type 'number' of selector''',),
-            error_types.TypeMismatch('''variant key "y" of type 'String' is not compatible with type 'number' of selector''',),
-            error_types.TypeMismatch('''variant key "z" of type 'String' is not compatible with type 'number' of selector''',),
+            error_types.TypeMismatch(
+                """variant key "x" of type 'String' is not compatible with type 'number' of selector""",
+            ),
+            error_types.TypeMismatch(
+                """variant key "y" of type 'String' is not compatible with type 'number' of selector""",
+            ),
+            error_types.TypeMismatch(
+                """variant key "z" of type 'String' is not compatible with type 'number' of selector""",
+            ),
         ]
         assert errs[0].error_sources[0].position == (2, 6)
         assert errs[0].error_sources[1].position == (1, 9)
@@ -1058,8 +1063,12 @@ class TestCompiler(unittest.TestCase):
 
         code, errs = compile_messages_to_elm(src, self.locale)
         assert errs == [
-            error_types.TypeMismatch('''variant key "x" of type 'String' is not compatible with type 'FluentNumber number' of selector''',),
-            error_types.TypeMismatch('''variant key "y" of type 'String' is not compatible with type 'FluentNumber number' of selector''',),
+            error_types.TypeMismatch(
+                """variant key "x" of type 'String' is not compatible with type 'FluentNumber number' of selector""",
+            ),
+            error_types.TypeMismatch(
+                """variant key "y" of type 'String' is not compatible with type 'FluentNumber number' of selector""",
+            ),
         ]
         assert errs[0].error_sources[0].position == (2, 6)
         assert errs[0].error_sources[1].position == (1, 9)
@@ -1164,9 +1173,7 @@ class TestCompiler(unittest.TestCase):
             self.locale,
         )
         self.assertEqual(errs[0].error_sources[0].message_id, "foo")
-        self.assertEqual(
-            errs[0], error_types.CyclicReferenceError("Cyclic reference in foo")
-        )
+        self.assertEqual(errs[0], error_types.CyclicReferenceError("Cyclic reference in foo"))
 
     def test_cycle_detection_with_attrs(self):
         code, errs = compile_messages_to_elm(
@@ -1180,13 +1187,9 @@ class TestCompiler(unittest.TestCase):
             self.locale,
         )
         self.assertEqual(errs[0].error_sources[0].message_id, "foo.attr1")
-        self.assertEqual(
-            errs[0], error_types.CyclicReferenceError("Cyclic reference in foo.attr1")
-        )
+        self.assertEqual(errs[0], error_types.CyclicReferenceError("Cyclic reference in foo.attr1"))
         self.assertEqual(errs[1].error_sources[0].message_id, "bar.attr2")
-        self.assertEqual(
-            errs[1], error_types.CyclicReferenceError("Cyclic reference in bar.attr2")
-        )
+        self.assertEqual(errs[1], error_types.CyclicReferenceError("Cyclic reference in bar.attr2"))
 
     def test_term_cycle_detection(self):
         code, errs = compile_messages_to_elm(
@@ -1398,11 +1401,7 @@ class TestCompiler(unittest.TestCase):
         )
         self.assertEqual(
             errs,
-            [
-                error_types.TermParameterError(
-                    "Positional arguments passed to term '-thing'"
-                )
-            ],
+            [error_types.TermParameterError("Positional arguments passed to term '-thing'")],
         )
         self.assertEqual(errs[0].error_sources[0].message_id, "thing-positional-arg")
 
@@ -1472,9 +1471,7 @@ class TestCompiler(unittest.TestCase):
         # This construct is technically allowed at the moment, but might be
         # disallowed in future, and it doesn't make a huge amount of sense,
         # so we disallow for now.
-        self.assertEqual(
-            errs, [error_types.ReferenceError("Message 'msg' called from within a term")]
-        )
+        self.assertEqual(errs, [error_types.ReferenceError("Message 'msg' called from within a term")])
         self.assertEqual(errs[0].error_sources[0].message_id, "ref-foo")
 
 
@@ -1877,9 +1874,7 @@ class TestHtml(unittest.TestCase):
             self.locale,
         )
         self.assertEqual(len(errs), 1)
-        self.assertEqual(
-            errs[0].message, "Cannot use HTML message foo-html from plain text context."
-        )
+        self.assertEqual(errs[0].message, "Cannot use HTML message foo-html from plain text context.")
 
     def test_html_message_call_from_plain_test(self):
         code, errs = compile_messages_to_elm(
@@ -1890,9 +1885,7 @@ class TestHtml(unittest.TestCase):
             self.locale,
         )
         self.assertEqual(len(errs), 1)
-        self.assertEqual(
-            errs[0].message, "Cannot use HTML message foo-html from plain text context."
-        )
+        self.assertEqual(errs[0].message, "Cannot use HTML message foo-html from plain text context.")
 
     def test_select_expression_1(self):
         # Test we get HTML handling of the pattern inside the select express

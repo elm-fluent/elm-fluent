@@ -2,4 +2,4 @@ import textwrap
 
 
 def dedent_ftl(text):
-    return textwrap.dedent("{}\n".format(text.rstrip())).lstrip("\n")
+    return textwrap.dedent(f"{text.rstrip()}\n").lstrip("\n")

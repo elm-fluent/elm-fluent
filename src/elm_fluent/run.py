@@ -8,7 +8,7 @@ from .compiler import compile_master, compile_messages, module_name_for_locale
 from .utils import normpath
 
 
-class MissingTranslationStrategy(object):
+class MissingTranslationStrategy:
     def get_locale_when_missing(self, locale):
         raise NotImplementedError()
 
@@ -20,9 +20,7 @@ class MissingTranslationStrategy(object):
 
 
 def missing_file(filename, options):
-    return error_types.MissingMessageFile(
-        "Message file '{0}' not found".format(filename)
-    )
+    return error_types.MissingMessageFile(f"Message file '{filename}' not found")
 
 
 class ErrorWhenMissing(MissingTranslationStrategy):
@@ -33,11 +31,7 @@ class ErrorWhenMissing(MissingTranslationStrategy):
         errors.append(missing_file(filename, options))
 
     def missing_message(self, message_id, locale, errors, warnings):
-        errors.append(
-            error_types.MissingMessage(
-                "Locale '{0}' - Message '{1}' missing".format(locale, message_id)
-            )
-        )
+        errors.append(error_types.MissingMessage(f"Locale '{locale}' - Message '{message_id}' missing"))
 
 
 class FallbackToDefaultLocaleWhenMissing(MissingTranslationStrategy):
@@ -62,18 +56,10 @@ class FallbackToDefaultLocaleWhenMissing(MissingTranslationStrategy):
 
     def missing_message(self, message_id, locale, errors, warnings):
         if locale == self.fallback_locale:
-            extra = (
-                " This message will be omitted since it is not in the fallback locale."
-            )
+            extra = " This message will be omitted since it is not in the fallback locale."
         else:
             extra = ""
-        warnings.append(
-            error_types.MissingMessage(
-                "Locale '{0}' - Message '{1}' missing.{2}".format(
-                    locale, message_id, extra
-                )
-            )
-        )
+        warnings.append(error_types.MissingMessage(f"Locale '{locale}' - Message '{message_id}' missing.{extra}"))
 
 
 def run_compile(options):
@@ -81,14 +67,12 @@ def run_compile(options):
     locales.sort()
     if not locales:
         raise click.UsageError(
-            "No locale directories (directories containing .ftl files) found in {0} directory"
-            .format(normpath(options.locales_fs, options.locales_dir))
+            f"No locale directories (directories containing .ftl files) found in {normpath(options.locales_fs, options.locales_dir)} directory"
         )
     bad_locales = [l for l in locales if not language_tags.tags.check(l)]
     if bad_locales:
         raise click.UsageError(
-            "The following directory names are not valid BCP 47 language tags: {0}"
-            .format(", ".join(bad_locales))
+            f"The following directory names are not valid BCP 47 language tags: {', '.join(bad_locales)}"
         )
 
     stems = find_all_ftl_stems(options.locales_fs, options.locales_dir, options.include, locales)
@@ -97,9 +81,7 @@ def run_compile(options):
     error_printers = []
     warning_printers = []
     for stem in stems:
-        success, finalizer, error_printer, warning_printer = generate_elm_for_stem(
-            options, locales, stem
-        )
+        success, finalizer, error_printer, warning_printer = generate_elm_for_stem(options, locales, stem)
         if success:
             finalizers.append(finalizer)
         if error_printer:
@@ -161,9 +143,7 @@ def generate_elm_for_stem(options, locales, stem):
             else:
                 modules_to_write.append((new_elm_path, module))
         else:
-            options.missing_translation_strategy.missing_ftl_file(
-                options, filename, locale, errors, warnings
-            )
+            options.missing_translation_strategy.missing_ftl_file(options, filename, locale, errors, warnings)
 
     master_module_name = module_name_for_stem(stem, master=True)
     try:
@@ -172,7 +152,7 @@ def generate_elm_for_stem(options, locales, stem):
         )
     except Exception as e:
         click.secho(
-            "While compiling {0}, an exception occurred.".format(master_module_name),
+            f"While compiling {master_module_name}, an exception occurred.",
             fg="red",
             bold=True,
         )
@@ -200,9 +180,7 @@ def generate_elm_for_stem(options, locales, stem):
                     source = module.as_source_code()
                     ensure_path_dirs(output_fs, fname)
                     if options.verbose:
-                        click.echo(
-                            "Writing {0}".format(fname)
-                        )
+                        click.echo(f"Writing {fname}")
                     with output_fs.open(fname, "wb") as f:
                         f.write(source.encode("utf-8"))
 
@@ -230,27 +208,13 @@ def print_errors(options, errors):
                 source_filename = error_source.source_filename
                 row, col = error_source.position
                 if error_source.message_id is not None:
-                    click.echo(
-                        "{0}:{1}:{2}: In message '{3}': {4}".format(
-                            source_filename,
-                            row,
-                            col,
-                            error_source.message_id,
-                            err.message,
-                        )
-                    )
+                    click.echo(f"{source_filename}:{row}:{col}: In message '{error_source.message_id}': {err.message}")
                 else:
-                    click.echo(
-                        "{0}:{1}:{2}: {3}".format(source_filename, row, col, err.message)
-                    )
+                    click.echo(f"{source_filename}:{row}:{col}: {err.message}")
         else:
             if hasattr(err, "message_func_name"):
-                click.echo(
-                    "While trying to compile master '{0}' function:".format(
-                        err.message_func_name
-                    )
-                )
-                click.echo("  {0}".format(err.message))
+                click.echo(f"While trying to compile master '{err.message_func_name}' function:")
+                click.echo(f"  {err.message}")
             else:
                 click.echo(err.message)
 
@@ -289,15 +253,14 @@ def path_for_module(options, module_name):
 
 def find_locales(locales_fs, locales_dir, include_glob):
     return [
-        d.name for d in locales_fs.scandir(locales_dir)
+        d.name
+        for d in locales_fs.scandir(locales_dir)
         if d.is_dir and contains_ftl(locales_fs.opendir(locales_dir).opendir(d.name), include_glob)
     ]
 
 
 def contains_ftl(fs, include_glob):
-    return any(
-        is_ftl(m.path) for m in fs.glob(include_glob)
-    )
+    return any(is_ftl(m.path) for m in fs.glob(include_glob))
 
 
 def is_ftl(filepath):
@@ -318,10 +281,6 @@ def find_all_ftl_stems(locales_fs, locales_dir, include_glob, locales):
     ftl_stems = set([])
     for l in locales:
         locale_base_fs = locales_fs.opendir(os.path.join(locales_dir, l))
-        ftl_files = [
-            m.path.lstrip('/')
-            for m in locale_base_fs.glob(include_glob)
-            if is_ftl(m.path)
-        ]
+        ftl_files = [m.path.lstrip("/") for m in locale_base_fs.glob(include_glob) if is_ftl(m.path)]
         ftl_stems |= set(ftl_files)
     return sorted(list(ftl_stems))

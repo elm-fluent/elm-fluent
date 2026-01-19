@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import os
 import subprocess
 import sys
@@ -23,7 +22,6 @@ def noisy_check_call(cmd):
 
 @pytest.mark.slow
 class TestEndToEnd(unittest.TestCase):
-
     visible = os.environ.get("TEST_SHOW_BROWSER", "0") == "1"
     use_network = os.environ.get("TEST_NO_NETWORK", "0") != "1"
 
@@ -63,15 +61,13 @@ class TestEndToEnd(unittest.TestCase):
         if "TRAVIS_BUILD_DIR" in os.environ:
             # See https://github.com/elm/compiler/issues/1473#issuecomment-245704142
             elm_make_cmd = [
-                os.path.join(
-                    os.environ["TRAVIS_BUILD_DIR"], "sysconfcpus", "bin", "sysconfcpus"
-                ),
+                os.path.join(os.environ["TRAVIS_BUILD_DIR"], "sysconfcpus", "bin", "sysconfcpus"),
                 "-n",
                 "2",
             ] + elm_make_cmd
 
         noisy_check_call(elm_make_cmd)
-        self.browser.get("file://{0}/main.html".format(TEST_PROJECT))
+        self.browser.get(f"file://{TEST_PROJECT}/main.html")
         page_source = self.browser.page_source
 
         # Static tests
@@ -121,12 +117,8 @@ class TestEndToEnd(unittest.TestCase):
 
         # Dynamic HTML:
         self.assertIn("You haven't moved yet", page_source)
-        self.assertIn(
-            '<a data-left="" class="direction" href="#">left</a>', page_source
-        )
-        self.assertIn(
-            '<a data-right="" class="direction" href="#">right</a>', page_source
-        )
+        self.assertIn('<a data-left="" class="direction" href="#">left</a>', page_source)
+        self.assertIn('<a data-right="" class="direction" href="#">right</a>', page_source)
 
         e = self.browser.find_element_by_css_selector("a[data-left]")
         e.click()

@@ -58,7 +58,7 @@ class InferenceEnvironment:
             expr=expr,
             message_id=self.current.message_id,
             source_filename=self.source_filename,
-            messages_string=self.messages_string
+            messages_string=self.messages_string,
         )
 
 
@@ -76,7 +76,6 @@ def infer_arg_types(message_dict, sorted_message_ids, source_filename, messages_
         known_arg_types=output,
     )
     for message_id in sorted_message_ids:
-
         msg = message_dict[message_id]
         inferred_types = []  # (name, InferredType or None)
         with env.modified(message_id=message_id):
@@ -104,12 +103,12 @@ def infer_variable_reference(expr, env):
 
 @infer.register(ast.FunctionReference)
 def infer_function_reference(expr, env):
-    if expr.id.name == 'NUMBER':
+    if expr.id.name == "NUMBER":
         posargs = expr.arguments.positional
         if len(posargs) > 0:
             if isinstance(posargs[0], ast.VariableReference):
                 return [(posargs[0].id.name, InferredType(Number, [env.ftl_source_for_expr(expr)]))]
-    if expr.id.name == 'DATETIME':
+    if expr.id.name == "DATETIME":
         posargs = expr.arguments.positional
         if len(posargs) > 0:
             if isinstance(posargs[0], ast.VariableReference):
@@ -129,11 +128,15 @@ def infer_message_reference(expr, env):
     arg_types = env.known_arg_types[reference_id]
     return [
         # Copy over all params from the message we are calling.
-        (name, InferredType(t.type,
-                            # Combine evidence from called message with the fact
-                            # that we are calling that message.
-                            [env.ftl_source_for_expr(expr)] + t.evidences
-                            ))
+        (
+            name,
+            InferredType(
+                t.type,
+                # Combine evidence from called message with the fact
+                # that we are calling that message.
+                [env.ftl_source_for_expr(expr)] + t.evidences,
+            ),
+        )
         for name, t in arg_types.items()
     ]
 
@@ -145,39 +148,30 @@ def infer_select_expression(select_expr, env):
     retval = []
 
     name = select_expr.selector.id.name
-    numeric_variants = [
-        variant
-        for variant in select_expr.variants
-        if isinstance(variant.key, ast.NumberLiteral)
-    ]
-    plural_form_variants = [
-        variant
-        for variant in select_expr.variants
-        if is_cldr_plural_form_key(variant.key)
-    ]
+    numeric_variants = [variant for variant in select_expr.variants if isinstance(variant.key, ast.NumberLiteral)]
+    plural_form_variants = [variant for variant in select_expr.variants if is_cldr_plural_form_key(variant.key)]
     other_variants = list(set(select_expr.variants) - set(numeric_variants) - set(plural_form_variants))
 
     if numeric_variants:
-        retval.append((name, InferredType(Number,
-                                          [env.ftl_source_for_expr(variant.key)
-                                           for variant in numeric_variants])))
+        retval.append(
+            (name, InferredType(Number, [env.ftl_source_for_expr(variant.key) for variant in numeric_variants]))
+        )
 
     if not other_variants:
         # We've only got numbers and plural form categories
         # Treat everything that looks like a plural form as evidence for numeric
-        retval.append((name, InferredType(Number,
-                                          [env.ftl_source_for_expr(variant.key)
-                                           for variant in plural_form_variants])))
+        retval.append(
+            (name, InferredType(Number, [env.ftl_source_for_expr(variant.key) for variant in plural_form_variants]))
+        )
     else:
         # We got non-plural form strings, and potentially plural form strings.
         # Treat plural form (and others) as evidence for string.
         string_variants = [
-            variant for variant in select_expr.variants
-            if variant in plural_form_variants or variant in other_variants
+            variant for variant in select_expr.variants if variant in plural_form_variants or variant in other_variants
         ]
-        retval.append((name, InferredType(String,
-                                          [env.ftl_source_for_expr(variant.key)
-                                           for variant in string_variants])))
+        retval.append(
+            (name, InferredType(String, [env.ftl_source_for_expr(variant.key) for variant in string_variants]))
+        )
 
     return retval
 
@@ -226,10 +220,9 @@ def combine_inferred_types(inferred_types, message_source):
                 type=String,
                 evidences=[
                     e
-                    for evidences in
-                    [t.evidences for n, t in inferred_types
-                     if n == name and t.type is None]
+                    for evidences in [t.evidences for n, t in inferred_types if n == name and t.type is None]
                     for e in evidences
-                ])
+                ],
+            )
 
     return output

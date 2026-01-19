@@ -1,6 +1,7 @@
 """
 Stub to define types for the Intl.Locale module
 """
+
 from .. import codegen, types
 from . import defaults as dtypes
 

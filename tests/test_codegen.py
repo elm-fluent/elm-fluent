@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import textwrap
 import unittest
 
@@ -85,9 +84,7 @@ class TestCodeGen(unittest.TestCase):
 
     def test_function(self):
         module = codegen.Module()
-        func = codegen.Function(
-            "myfunc", args=["myarg1", "myarg2"], parent_scope=module
-        )
+        func = codegen.Function("myfunc", args=["myarg1", "myarg2"], parent_scope=module)
         func.body.value = codegen.String("hello")
         func = codegen.simplify(func)
         self.assertCodeEqual(
@@ -100,12 +97,12 @@ class TestCodeGen(unittest.TestCase):
 
     def test_function_typed(self):
         module = codegen.Module()
-        function_type = types.Function.for_multiple_inputs(
-            [dtypes.String, dtypes.Number], dtypes.String
-        )
+        function_type = types.Function.for_multiple_inputs([dtypes.String, dtypes.Number], dtypes.String)
         module.reserve_name("myfunc", type=function_type)
         func = codegen.Function(
-            "myfunc", args=["myarg1", "myarg2"], parent_scope=module,
+            "myfunc",
+            args=["myarg1", "myarg2"],
+            parent_scope=module,
             function_type=function_type,
         )
         func.body.value = codegen.String("hello")
@@ -253,30 +250,20 @@ class TestCodeGen(unittest.TestCase):
 
     def test_function_call_args(self):
         scope = codegen.Scope()
-        scope.reserve_name(
-            "aFunction", type=types.Function(dtypes.Number, dtypes.String)
-        )
-        func_call = codegen.FunctionCall(
-            scope.variables["aFunction"], [codegen.Number(123)]
-        )
+        scope.reserve_name("aFunction", type=types.Function(dtypes.Number, dtypes.String))
+        func_call = codegen.FunctionCall(scope.variables["aFunction"], [codegen.Number(123)])
         self.assertCodeEqual(func_call.as_source_code(), "aFunction 123")
 
     def test_function_call_using_apply(self):
         scope = codegen.Scope()
-        scope.reserve_name(
-            "aFunction", type=types.Function(dtypes.Number, dtypes.String)
-        )
+        scope.reserve_name("aFunction", type=types.Function(dtypes.Number, dtypes.String))
         func_call = scope.variables["aFunction"].apply(codegen.Number(123))
         self.assertCodeEqual(func_call.as_source_code(), "aFunction 123")
 
     def test_function_call_nested(self):
         scope = codegen.Scope()
-        scope.reserve_name(
-            "aFunction", type=types.Function(dtypes.Number, dtypes.String)
-        )
-        scope.reserve_name(
-            "aFunction2", type=types.Function(dtypes.String, dtypes.Number)
-        )
+        scope.reserve_name("aFunction", type=types.Function(dtypes.Number, dtypes.String))
+        scope.reserve_name("aFunction2", type=types.Function(dtypes.String, dtypes.Number))
         func_call_1 = scope.variables["aFunction"].apply(codegen.Number(123))
         func_call_2 = scope.variables["aFunction2"].apply(func_call_1)
         self.assertCodeEqual(func_call_2.as_source_code(), "aFunction2 (aFunction 123)")
@@ -417,9 +404,7 @@ class TestCodeGen(unittest.TestCase):
         scope = codegen.Scope()
         tmp = scope.reserve_name("tmp", type=rec)
         var = scope.variables[tmp]
-        update = codegen.RecordUpdate(
-            var, name=codegen.String("Fred"), age=codegen.Number(34)
-        )
+        update = codegen.RecordUpdate(var, name=codegen.String("Fred"), age=codegen.Number(34))
         self.assertCodeEqual(
             update.as_source_code(),
             """
@@ -431,9 +416,7 @@ class TestCodeGen(unittest.TestCase):
         scope = codegen.Scope()
         scope.reserve_name(
             "aFunction",
-            type=types.Function.for_multiple_inputs(
-                [dtypes.Number, dtypes.Number], dtypes.String
-            ),
+            type=types.Function.for_multiple_inputs([dtypes.Number, dtypes.Number], dtypes.String),
         )
         let1 = codegen.Let()
         name1 = let1.add_assignment("x", codegen.Number(1))

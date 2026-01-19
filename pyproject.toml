@@ -1,0 +1,82 @@
+[project]
+name = "elm-fluent"
+version = "0.6.0"
+description = "Fluent i18n solution for Elm"
+readme = "README.rst"
+authors = [
+    { name = "Luke Plant", email = "luke@lukeplant.me.uk" }
+]
+requires-python = ">=3.10"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Natural Language :: English",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+license = {text = "MIT"}
+
+keywords = [
+  "fluent",
+  "localization",
+  "l10n",
+  "projectfluent",
+  "ftl",
+  "elm"
+]
+
+dependencies = [
+    "attrs>=18",
+    "beautifulsoup4>=4.6.3",
+    "click>=6.0",
+    "fluent-syntax>=0.15",
+    "fs>=2.4.2",
+    "language-tags>=0.4.4",
+    "lxml>=4.2.4",
+    "watchdog>=0.8.3",
+]
+
+[project.urls]
+HomePage = "https://github.com/elm-fluent/elm-fluent"
+
+
+[build-system]
+requires = ["setuptools>=61.2"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "pyvirtualdisplay>=3.0",
+    "selenium>=4.40.0",
+]
+
+
+[project.scripts]
+ftl2elm = "elm_fluent.cli:main"
+
+[tool.ruff]
+line-length = 120
+target-version = 'py310'
+
+[tool.ruff.lint]
+extend-select = [
+  "UP",  # enable pyupgrade
+  "I",  # enable isort
+  "FLY",  # enably flynt
+]

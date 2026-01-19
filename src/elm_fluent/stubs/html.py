@@ -1,6 +1,7 @@
 """
 Types for Html module
 """
+
 from .. import codegen, types
 from . import defaults as dtypes
 

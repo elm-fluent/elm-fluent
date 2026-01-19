@@ -7,6 +7,8 @@ from fluent.syntax import FluentParser, ast
 from . import codegen, error_types, html_compiler, inference, types
 from .stubs import (
     defaults as dtypes,
+)
+from .stubs import (
     fluent,
     html,
     html_attributes,
@@ -48,7 +50,7 @@ PLURAL_FORM_FOR_NUMBER_NAME = "plural_form_for_number"
 
 
 @attr.s
-class CurrentEnvironment(object):
+class CurrentEnvironment:
     # The parts of CompilerEnvironment that we want to mutate (and restore)
     # temporarily for some parts of a call chain.
     message_id = attr.ib(default=None)
@@ -57,7 +59,7 @@ class CurrentEnvironment(object):
 
 
 @attr.s
-class CompilerEnvironment(object):
+class CompilerEnvironment:
     locale = attr.ib()
     use_isolating = attr.ib()
     message_mapping = attr.ib(factory=dict)
@@ -201,9 +203,7 @@ def compile_messages(
     # Pass one, find all the names, so that we can populate message_mapping,
     # which is needed for compilation.
     for msg_id, msg in message_ids_to_ast.items():
-        function_name = module.reserve_name(
-            message_function_name_for_msg_id(msg_id)
-        )
+        function_name = module.reserve_name(message_function_name_for_msg_id(msg_id))
 
         compiler_env.message_mapping[msg_id] = function_name
 
@@ -217,21 +217,17 @@ def compile_messages(
     # These two dicts are: {message id: order number}
     source_order = {msg_id: i for i, msg_id in enumerate(message_ids_to_ast.keys())}
     processing_order = get_processing_order(message_ids_to_ast)
-    sorted_message_ids = [
-        msg_id
-        for msg_id, i in sorted(processing_order.items(), key=lambda pair: pair[1])
-    ]
+    sorted_message_ids = [msg_id for msg_id, i in sorted(processing_order.items(), key=lambda pair: pair[1])]
     # Pass 2, type inference of message args
-    message_arg_types = inference.infer_arg_types(message_ids_to_ast, sorted_message_ids, source_filename,
-                                                  messages_string)
+    message_arg_types = inference.infer_arg_types(
+        message_ids_to_ast, sorted_message_ids, source_filename, messages_string
+    )
     compiler_env.message_arg_types = message_arg_types
 
     # Pass 3, actual compilation
     for msg_id in sorted_message_ids:
         msg = message_ids_to_ast[msg_id]
-        with compiler_env.modified(
-            message_id=msg_id, html_context=is_html_message_id(msg_id)
-        ):
+        with compiler_env.modified(message_id=msg_id, html_context=is_html_message_id(msg_id)):
             function_name = compiler_env.message_mapping[msg_id]
 
             # The final function names need to be easily predictable. If we
@@ -242,34 +238,27 @@ def compile_messages(
             if function_name != expected_message_function_name:
                 if expected_message_function_name in codegen.ELM_KEYWORDS:
                     error_msg = (
-                        "'{0}' is not allowed as a message ID because it "
+                        f"'{msg_id}' is not allowed as a message ID because it "
                         "clashes with an Elm keyword. "
-                        "Please choose another ID.".format(msg_id)
+                        "Please choose another ID."
                     )
                 elif expected_message_function_name in default_imports.names_in_use():
                     error_msg = (
-                        "'{0}' is not allowed as a message ID because it "
+                        f"'{msg_id}' is not allowed as a message ID because it "
                         "clashes with an Elm default import. "
-                        "Please choose another ID.".format(msg_id)
+                        "Please choose another ID."
                     )
                 elif expected_message_function_name in reverse_message_mapping:
                     error_msg = (
-                        "'{0}' is not allowed as a message ID because it "
-                        "clashes with another message ID - '{1}'. "
-                        "Please choose another ID.".format(
-                            msg_id,
-                            reverse_message_mapping[expected_message_function_name],
-                        )
+                        f"'{msg_id}' is not allowed as a message ID because it "
+                        f"clashes with another message ID - '{reverse_message_mapping[expected_message_function_name]}'. "
+                        "Please choose another ID."
                     )
                 else:
                     raise NotImplementedError(
-                        "{0} not allowed, need good error message for why".format(
-                            expected_message_function_name
-                        )
+                        f"{expected_message_function_name} not allowed, need good error message for why"
                     )
-                compiler_env.add_current_message_error(
-                    error_types.BadMessageId(error_msg), [msg]
-                )
+                compiler_env.add_current_message_error(error_types.BadMessageId(error_msg), [msg])
                 function = codegen.Function(
                     parent_scope=module,
                     name=function_name,
@@ -277,13 +266,9 @@ def compile_messages(
                 )
                 function.body.value = codegen.CompilationError()
             else:
-                function = compile_message(
-                    msg, msg_id, function_name, module, compiler_env
-                )
+                function = compile_message(msg, msg_id, function_name, module, compiler_env)
             if not isinstance(function, codegen.CompilationError):
-                module.add_function(
-                    function_name, function, source_order=source_order[msg_id]
-                )
+                module.add_function(function_name, function, source_order=source_order[msg_id])
 
     module = codegen.simplify(module)
     return (module, compiler_env.errors, compiler_env.message_mapping, message_arg_types)
@@ -294,39 +279,28 @@ def compile_master(module_name, locales, locale_modules, message_mapping, locale
     Compile the master 'Translations' Elm file. For every message, this has a function
     that despatches to the function from the correct locale.
     """
-    func_name_to_message_id = {
-        func_name: message_id for message_id, func_name in message_mapping.items()
-    }
+    func_name_to_message_id = {func_name: message_id for message_id, func_name in message_mapping.items()}
     errors = []
     warnings = []
     module = codegen.Module(name=module_name)
     module.add_import(intl_locale.module, "Locale")
     module.add_import(fluent.module, "Fluent")
     module.add_import(html.module, "Html")
-    locale_module_local_names = OrderedDict([
-        (locale, module_name_for_locale(locale)) for locale in locales
-    ])
+    locale_module_local_names = OrderedDict([(locale, module_name_for_locale(locale)) for locale in locales])
 
     for locale, locale_module in locale_modules.items():
         if locale_module.exports:
             module.add_import(locale_module, locale_module_local_names[locale])
 
-    sub_module_exports = {
-        locale: locale_module.exports
-        for locale, locale_module in locale_modules.items()
-    }
+    sub_module_exports = {locale: locale_module.exports for locale, locale_module in locale_modules.items()}
     for locale in locales:
         if locale not in sub_module_exports:
             sub_module_exports[locale] = []
-    all_sub_module_exports = set(
-        [e for exports in sub_module_exports.values() for e in exports]
-    )
+    all_sub_module_exports = set([e for exports in sub_module_exports.values() for e in exports])
 
     for func_name in sorted(all_sub_module_exports):
         function_name = module.reserve_name(func_name)
-        assert function_name == func_name, "{0} != {1} unexpectedly".format(
-            function_name, func_name
-        )
+        assert function_name == func_name, f"{function_name} != {func_name} unexpectedly"
         message_id = func_name_to_message_id[function_name]
         combined_arg_types, arg_type_errors = combine_arg_types_master(locale_message_arg_types, message_id)
         errors.extend(arg_type_errors)
@@ -338,41 +312,26 @@ def compile_master(module_name, locales, locale_modules, message_mapping, locale
             args=function_args_for_func_name(function_name),
             function_type=function_type,
         )
-        locale_tag_expr = function.variables["Locale.toLanguageTag"].apply(
-            function.variables[LOCALE_ARG_NAME]
-        )
-        lower_cased_locale_tag_expr = function.variables["String.toLower"].apply(
-            locale_tag_expr
-        )
+        locale_tag_expr = function.variables["Locale.toLanguageTag"].apply(function.variables[LOCALE_ARG_NAME])
+        lower_cased_locale_tag_expr = function.variables["String.toLower"].apply(locale_tag_expr)
         case_expr = codegen.Case(lower_cased_locale_tag_expr, parent_scope=function)
 
         def do_call(l):
-            return function.variables[
-                "{0}.{1}".format(locale_module_local_names[l], func_name)
-            ].apply(
-                *[
-                    function.variables[a]
-                    for a in function_args_for_func_name(func_name)
-                ]
+            return function.variables[f"{locale_module_local_names[l]}.{func_name}"].apply(
+                *[function.variables[a] for a in function_args_for_func_name(func_name)]
             )
 
         for locale in locales:
             locale_to_use_for_message = None
-            fallback_locale = options.missing_translation_strategy.get_locale_when_missing(
-                locale
-            )
+            fallback_locale = options.missing_translation_strategy.get_locale_when_missing(locale)
             if locale not in locale_modules:
                 locale_to_use_for_message = fallback_locale
-                options.missing_translation_strategy.missing_message(
-                    message_id, locale, errors, warnings
-                )
+                options.missing_translation_strategy.missing_message(message_id, locale, errors, warnings)
             else:
                 mod = locale_modules[locale]
                 if func_name not in mod.exports:
                     locale_to_use_for_message = fallback_locale
-                    options.missing_translation_strategy.missing_message(
-                        message_id, locale, errors, warnings
-                    )
+                    options.missing_translation_strategy.missing_message(message_id, locale, errors, warnings)
                 else:
                     locale_to_use_for_message = locale
 
@@ -382,10 +341,7 @@ def compile_master(module_name, locales, locale_modules, message_mapping, locale
             else:
                 branch.value = do_call(locale_to_use_for_message)
 
-        if (
-            options.default_locale in locale_modules
-            and func_name in locale_modules[options.default_locale].exports
-        ):
+        if options.default_locale in locale_modules and func_name in locale_modules[options.default_locale].exports:
             otherwise_branch = case_expr.add_branch(codegen.Otherwise())
             otherwise_branch.value = do_call(options.default_locale)
             function.body.value = case_expr
@@ -448,22 +404,22 @@ def combine_arg_types_master(locale_message_arg_types, message_id):
     for arg_name, arg_type_list in combined.items():
         # We ignore Conflicts, because they'll be reported elsewhere
         # and we don't want cascading errors
-        non_conflict_types = [arg_type for arg_type in arg_type_list
-                              if not isinstance(arg_type, inference.Conflict)]
+        non_conflict_types = [arg_type for arg_type in arg_type_list if not isinstance(arg_type, inference.Conflict)]
         different_types = set([arg_type.type for arg_type in non_conflict_types])
         if len(different_types) > 1:
             # combine_inferred_types is guaranteed to return a Conflict instance
             # for us:
             conflict = inference.combine_inferred_types(
-                [(arg_name, inferred_type)
-                 for inferred_type in non_conflict_types],
-                None)[arg_name]
-            errors.append(error_types.ArgumentConflictError(
-                message_id=message_id,
-                arg_name=arg_name,
-                conflict=conflict,
-                master=True,
-            ))
+                [(arg_name, inferred_type) for inferred_type in non_conflict_types], None
+            )[arg_name]
+            errors.append(
+                error_types.ArgumentConflictError(
+                    message_id=message_id,
+                    arg_name=arg_name,
+                    conflict=conflict,
+                    master=True,
+                )
+            )
 
         retval[arg_name] = non_conflict_types[0] if non_conflict_types else arg_type_list[0]
     return retval, errors
@@ -487,9 +443,7 @@ def function_type_for_func_name(func_name, external_arg_types):
             dtypes.List.specialize(a=html.Html.specialize(msg=msg)),
         )
     else:
-        return types.Function.for_multiple_inputs(
-            [intl_locale.Locale, args_type], dtypes.String
-        )
+        return types.Function.for_multiple_inputs([intl_locale.Locale, args_type], dtypes.String)
 
 
 def inferred_type_to_elm_type(inferred_type):
@@ -550,11 +504,13 @@ def compile_message(msg, msg_id, function_name, module, compiler_env):
     arg_types = compiler_env.message_arg_types[msg_id]
     for arg_name, arg_type in arg_types.items():
         if isinstance(arg_type, inference.Conflict):
-            compiler_env.errors.append(error_types.ArgumentConflictError(
-                message_id=msg_id,
-                arg_name=arg_name,
-                conflict=arg_type,
-            ))
+            compiler_env.errors.append(
+                error_types.ArgumentConflictError(
+                    message_id=msg_id,
+                    arg_name=arg_name,
+                    conflict=arg_type,
+                )
+            )
 
     function_type = function_type_for_func_name(function_name, arg_types)
     module.set_type(function_name, function_type)
@@ -566,9 +522,7 @@ def compile_message(msg, msg_id, function_name, module, compiler_env):
     )
 
     if contains_reference_cycle(msg, compiler_env):
-        error = error_types.CyclicReferenceError(
-            "Cyclic reference in {0}".format(msg_id)
-        )
+        error = error_types.CyclicReferenceError(f"Cyclic reference in {msg_id}")
         compiler_env.add_current_message_error(error, [msg])
         return codegen.CompilationError()
     else:
@@ -718,9 +672,7 @@ def compile_expr(element, local_scope, compiler_env):
     to be a function that returns a message, or a branch of that
     function.
     """
-    raise NotImplementedError(
-        "Cannot handle object of type {0}".format(type(element).__name__)
-    )
+    raise NotImplementedError(f"Cannot handle object of type {type(element).__name__}")
 
 
 @compile_expr.register(ast.Message)
@@ -749,9 +701,7 @@ def compile_expr_pattern(pattern, local_scope, compiler_env):
         return html_compiler.compile_pattern(pattern, local_scope, compiler_env)
 
     for element in pattern.elements:
-        wrap_this_with_isolating = use_isolating and not isinstance(
-            element, ast.TextElement
-        )
+        wrap_this_with_isolating = use_isolating and not isinstance(element, ast.TextElement)
         if wrap_this_with_isolating:
             parts.append(codegen.String(FSI))
         parts.append(render_to_string(compile_expr(element, local_scope, compiler_env), local_scope, compiler_env))
@@ -768,7 +718,7 @@ def compile_expr_text(text, local_scope, compiler_env):
 
 @compile_expr.register(ast.StringLiteral)
 def compile_expr_string_expression(expr, local_scope, compiler_env):
-    return codegen.String(expr.parse()['value'], ftl_source=compiler_env.make_ftl_source(expr))
+    return codegen.String(expr.parse()["value"], ftl_source=compiler_env.make_ftl_source(expr))
 
 
 @compile_expr.register(ast.NumberLiteral)
@@ -799,9 +749,7 @@ def compile_expr_message_reference(reference, local_scope, compiler_env):
     name = reference_to_id(reference)
     if compiler_env.current.term_args is not None:
         compiler_env.add_current_message_error(
-            error_types.ReferenceError(
-                "Message '{0}' called from within a term".format(name)
-            ),
+            error_types.ReferenceError(f"Message '{name}' called from within a term"),
             [reference],
         )
     return do_message_call(name, local_scope, reference, compiler_env)
@@ -825,11 +773,7 @@ def compile_expr_term_reference(reference, local_scope, compiler_env):
 
         if args:
             compiler_env.add_current_message_error(
-                error_types.TermParameterError(
-                    "Positional arguments passed to term '{0}'".format(
-                        reference_to_id(reference)
-                    )
-                ),
+                error_types.TermParameterError(f"Positional arguments passed to term '{reference_to_id(reference)}'"),
                 [reference],
             )
             return codegen.CompilationError()
@@ -853,9 +797,7 @@ def compile_expr_term_reference(reference, local_scope, compiler_env):
                 else:
                     compiler_env.add_current_message_error(
                         error_types.TermParameterError(
-                            "Parameter '{0}' was passed to term '{1}' which does not take parameters.".format(
-                                kwarg_name, term_id
-                            )
+                            f"Parameter '{kwarg_name}' was passed to term '{term_id}' which does not take parameters."
                         ),
                         [reference],
                     )
@@ -880,20 +822,13 @@ def do_message_call(name, local_scope, expr, compiler_env):
         if not compiler_env.current.html_context:
             if is_html_message_id(name):
                 compiler_env.add_current_message_error(
-                    error_types.HtmlTypeMismatch(
-                        "Cannot use HTML message {0} from plain text context.".format(
-                            name
-                        )
-                    ),
+                    error_types.HtmlTypeMismatch(f"Cannot use HTML message {name} from plain text context."),
                     [expr],
                 )
                 return codegen.CompilationError()
 
         return local_scope.variables[msg_func_name].apply(
-            *[
-                local_scope.variables[a]
-                for a in function_args_for_func_name(msg_func_name)
-            ]
+            *[local_scope.variables[a] for a in function_args_for_func_name(msg_func_name)]
         )
     else:
         return unknown_reference(name, local_scope, expr, compiler_env)
@@ -901,9 +836,9 @@ def do_message_call(name, local_scope, expr, compiler_env):
 
 def unknown_reference(name, local_scope, expr, compiler_env):
     if name.startswith("-"):
-        error = error_types.ReferenceError("Unknown term: {0}".format(name))
+        error = error_types.ReferenceError(f"Unknown term: {name}")
     else:
-        error = error_types.ReferenceError("Unknown message: {0}".format(name))
+        error = error_types.ReferenceError(f"Unknown message: {name}")
     compiler_env.add_current_message_error(error, [expr])
     return codegen.CompilationError()
 
@@ -912,25 +847,15 @@ def unknown_reference(name, local_scope, expr, compiler_env):
 def compile_expr_select_expression(select_expr, local_scope, compiler_env):
     selector_value = compile_expr(select_expr.selector, local_scope, compiler_env)
 
-    static_retval = resolve_select_expression_statically(
-        select_expr, selector_value, local_scope, compiler_env
-    )
+    static_retval = resolve_select_expression_statically(select_expr, selector_value, local_scope, compiler_env)
     if static_retval is not None:
         return static_retval
 
-    numeric_variants = [
-        variant
-        for variant in select_expr.variants
-        if isinstance(variant.key, ast.NumberLiteral)
-    ]
+    numeric_variants = [variant for variant in select_expr.variants if isinstance(variant.key, ast.NumberLiteral)]
     any_numerics = len(numeric_variants) > 0
     all_numerics = len(numeric_variants) == len(select_expr.variants)
 
-    plural_form_variants = [
-        variant
-        for variant in select_expr.variants
-        if is_cldr_plural_form_key(variant.key)
-    ]
+    plural_form_variants = [variant for variant in select_expr.variants if is_cldr_plural_form_key(variant.key)]
     all_plural_forms = len(plural_form_variants) == len(select_expr.variants)
 
     if any_numerics:
@@ -943,9 +868,7 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
 
     def get_plural_form(number_val):
         return local_scope.variables["PluralRules.select"].apply(
-            local_scope.variables["PluralRules.fromLocale"].apply(
-                local_scope.variables[LOCALE_ARG_NAME]
-            ),
+            local_scope.variables["PluralRules.fromLocale"].apply(local_scope.variables[LOCALE_ARG_NAME]),
             number_val,
         )
 
@@ -954,15 +877,11 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
         if selector_value.type == dtypes.Number:
             number_val = selector_value
         elif selector_value.type == fluent.FluentNumber:
-            number_val = local_scope.variables["Fluent.numberValue"].apply(
-                selector_value
-            )
+            number_val = local_scope.variables["Fluent.numberValue"].apply(selector_value)
         elif selector_value.type == types.Conflict:
             number_val = codegen.Number(0)  # to allow compilation to continue
         else:
-            raise NotImplementedError(
-                "Can't handle numeric of type {0}".format(selector_value.type)
-            )
+            raise NotImplementedError(f"Can't handle numeric of type {selector_value.type}")
 
         if all_numerics:
             case_selector_value = number_val
@@ -1010,18 +929,16 @@ def compile_expr_select_expression(select_expr, local_scope, compiler_env):
     else:
         case_expr = codegen.Case(case_selector_value, parent_scope=local_scope)
         # Sort so that default is last.
-        sorted_variants = sorted(
-            select_expr.variants, key=lambda v: 1 if v.default else 0
-        )
+        sorted_variants = sorted(select_expr.variants, key=lambda v: 1 if v.default else 0)
         for variant in sorted_variants:
             key_value = compile_expr(variant.key, local_scope, compiler_env)
             if key_value.type != case_selector_value.type and case_selector_value.type != types.Conflict:
                 compiler_env.add_current_message_error(
-                    error_types.TypeMismatch('''variant key "{0}" of type '{1}' is not compatible with type '{2}' of selector'''.format(
-                        key_value.ftl_source.expr_as_text(),
-                        key_value.type,
-                        case_selector_value.type
-                    )), [variant.key, select_expr.selector])
+                    error_types.TypeMismatch(
+                        f'''variant key "{key_value.ftl_source.expr_as_text()}" of type '{key_value.type}' is not compatible with type '{case_selector_value.type}' of selector'''
+                    ),
+                    [variant.key, select_expr.selector],
+                )
 
             # After having checked types above, for default case we actually
             # replace with an 'otherwise' matcher.
@@ -1066,16 +983,11 @@ def resolve_select_expression_statically(select_expr, selector_ast, block, compi
                 found = variant
                 break
         if selector_is_string:
-            if (
-                isinstance(variant.key, ast.Identifier)
-                and selector_ast.string_value == variant.key.name
-            ):
+            if isinstance(variant.key, ast.Identifier) and selector_ast.string_value == variant.key.name:
                 found = variant
                 break
         elif selector_is_number:
-            if isinstance(
-                variant.key, ast.NumberLiteral
-            ) and key_number_value == numeric_to_native(variant.key.value):
+            if isinstance(variant.key, ast.NumberLiteral) and key_number_value == numeric_to_native(variant.key.value):
                 found = variant
                 break
             elif isinstance(variant.key, ast.Identifier):
@@ -1119,11 +1031,10 @@ def compile_expr_variable_reference(argument, local_scope, compiler_env):
 
 @compile_expr.register(ast.FunctionReference)
 def compile_expr_call_expression(expr, local_scope, compiler_env):
-
     function_name = expr.id.name
 
     if function_name not in compiler_env.functions:
-        error = error_types.ReferenceError("Unknown function: {0}".format(function_name))
+        error = error_types.ReferenceError(f"Unknown function: {function_name}")
         compiler_env.add_current_message_error(error, [expr])
         return codegen.CompilationError()
 
@@ -1139,10 +1050,9 @@ def compile_expr_call_expression(expr, local_scope, compiler_env):
             match = False
             compiler_env.add_current_message_error(
                 error_types.FunctionParameterError(
-                    "{0}() got an unexpected keyword argument '{1}'".format(
-                        function_spec.name,
-                        kwarg_name)),
-                [kwarg.name]
+                    f"{function_spec.name}() got an unexpected keyword argument '{kwarg_name}'"
+                ),
+                [kwarg.name],
             )
         kwarg_value = compile_expr(kwarg.value, local_scope, compiler_env)
         compiled_kwargs[kwarg_name] = kwarg_value
@@ -1151,16 +1061,20 @@ def compile_expr_call_expression(expr, local_scope, compiler_env):
         match = False
         compiler_env.add_current_message_error(
             error_types.FunctionParameterError(
-                "{0}() takes {1} positional argument(s) but {2} were given".format(
-                    function_spec.name, function_spec.positional_args, len(compiled_args)
-                )),
-            [expr])
+                f"{function_spec.name}() takes {function_spec.positional_args} positional argument(s) but {len(compiled_args)} were given"
+            ),
+            [expr],
+        )
 
     if not match:
         return codegen.CompilationError()
 
     return function_spec.compile(
-        expr, compiled_args, compiled_kwargs, local_scope, compiler_env,
+        expr,
+        compiled_args,
+        compiled_kwargs,
+        local_scope,
+        compiler_env,
     )
 
 
@@ -1173,28 +1087,19 @@ def render_to_string(compiled_expr, local_scope, compiler_env):
         # Underlying type is also string, no more to do
         return compiled_expr
     if compiled_expr.type == dtypes.Number:
-        return local_scope.variables[
-            "NumberFormat.format"
-        ].apply(
-            local_scope.variables["NumberFormat.fromLocale"].apply(
-                local_scope.variables[LOCALE_ARG_NAME]
-            ),
+        return local_scope.variables["NumberFormat.format"].apply(
+            local_scope.variables["NumberFormat.fromLocale"].apply(local_scope.variables[LOCALE_ARG_NAME]),
             compiled_expr,
         )
     if compiled_expr.type == fluent.FluentNumber:
-        return local_scope.variables[
-            "Fluent.formatNumber"
-        ].apply(local_scope.variables[LOCALE_ARG_NAME], compiled_expr)
+        return local_scope.variables["Fluent.formatNumber"].apply(local_scope.variables[LOCALE_ARG_NAME], compiled_expr)
     if compiled_expr.type == fluent.FluentDate:
-        return local_scope.variables[
-            "Fluent.formatDate"
-        ].apply(local_scope.variables[LOCALE_ARG_NAME], compiled_expr)
+        return local_scope.variables["Fluent.formatDate"].apply(local_scope.variables[LOCALE_ARG_NAME], compiled_expr)
     if isinstance(compiled_expr, codegen.CompilationError):
         return compiled_expr
     raise NotImplementedError(
-        "Don't know how to convert object {0} of type {1} to string".format(
-            compiled_expr, compiled_expr.type
-        ))
+        f"Don't know how to convert object {compiled_expr} of type {compiled_expr.type} to string"
+    )
 
 
 class Default(codegen.Expression):
@@ -1209,16 +1114,18 @@ class Default(codegen.Expression):
 # --- Functions ---
 
 
-class FluentFunction(object):
+class FluentFunction:
     pass
 
 
 def bool_parameter(name, param_value, local_scope, compiler_env):
     if not isinstance(param_value, codegen.Number):
-        compiler_env.add_current_message_error(error_types.FunctionParameterError(
-            "Expecting a number (0 or 1) for {0} parameter, "
-            "got {1}".format(name, param_value.ftl_source.expr_as_text())
-        ), [param_value.ftl_source.expr])
+        compiler_env.add_current_message_error(
+            error_types.FunctionParameterError(
+                f"Expecting a number (0 or 1) for {name} parameter, got {param_value.ftl_source.expr_as_text()}"
+            ),
+            [param_value.ftl_source.expr],
+        )
         return codegen.CompilationError()
 
     return dtypes.Bool.False_ if param_value.number == 0 else dtypes.Bool.True_
@@ -1230,10 +1137,12 @@ def maybe_bool_parameter(name, param_value, local_scope, compiler_env):
 
 def int_parameter(name, param_value, local_scope, compiler_env):
     if not isinstance(param_value, codegen.Number):
-        compiler_env.add_current_message_error(error_types.FunctionParameterError(
-            "Expecting a number for {0} parameter, "
-            "got {1}".format(name, param_value.ftl_source.expr_as_text())
-        ), [param_value.ftl_source.expr])
+        compiler_env.add_current_message_error(
+            error_types.FunctionParameterError(
+                f"Expecting a number for {name} parameter, got {param_value.ftl_source.expr_as_text()}"
+            ),
+            [param_value.ftl_source.expr],
+        )
         return codegen.CompilationError()
     return param_value
 
@@ -1248,15 +1157,18 @@ def enum_parameter(enum_type, mapping):
             compiler_env.add_current_message_error(
                 error_types.FunctionParameterError(
                     "Expecting one of {0} for {1} parameter, got {2}".format(
-                        ", ".join('"{}"'.format(k) for k in sorted(mapping.keys())),
+                        ", ".join(f'"{k}"' for k in sorted(mapping.keys())),
                         param_name,
-                        param_value.ftl_source.expr_as_text())),
-                [param_value.ftl_source.expr])
+                        param_value.ftl_source.expr_as_text(),
+                    )
+                ),
+                [param_value.ftl_source.expr],
+            )
             return codegen.CompilationError()
 
         enum_type_module = enum_type.module
         qualifer = local_scope.get_name_qualifier(enum_type_module)
-        full_name = "{0}{1}".format(qualifer, mapping[param_value.string_value])
+        full_name = f"{qualifer}{mapping[param_value.string_value]}"
         return local_scope.variables[full_name]
 
     return parameter_handler
@@ -1311,7 +1223,7 @@ class DateTimeFunction(FluentFunction):
         "hour": number_style_parameter,
         "minute": number_style_parameter,
         "second": number_style_parameter,
-        "timeZoneName": timezone_style_parameter
+        "timeZoneName": timezone_style_parameter,
         # "dateStyle",  #  elm-intl doesn't support these yet
         # "timeStyle",
     }
@@ -1323,7 +1235,7 @@ class DateTimeFunction(FluentFunction):
         types_correct = arg.type == fluent.FluentDate
         if not types_correct and arg.type != types.Conflict:
             compiler_env.add_current_message_error(
-                error_types.TypeMismatch("DATETIME() expected date argument, found '{0}'".format(arg.type)),
+                error_types.TypeMismatch(f"DATETIME() expected date argument, found '{arg.type}'"),
                 [expr],
             )
         if types_correct and not kwargs:
@@ -1338,16 +1250,12 @@ class DateTimeFunction(FluentFunction):
 
             initial_opts = local_scope.add_assignment(
                 "initial_opts_",
-                local_scope.variables["Fluent.dateFormattingOptions"].apply(
-                    arg, ftl_source=ftl_source
-                ),
+                local_scope.variables["Fluent.dateFormattingOptions"].apply(arg, ftl_source=ftl_source),
             )
             options = codegen.RecordUpdate(initial_opts, **options_updates)
             fdate = local_scope.add_assignment(
                 "fdate_",
-                local_scope.variables["Fluent.reformattedDate"].apply(
-                    options, arg, ftl_source=ftl_source
-                ),
+                local_scope.variables["Fluent.reformattedDate"].apply(options, arg, ftl_source=ftl_source),
             )
             return fdate
 
@@ -1374,7 +1282,7 @@ class NumberFunction(FluentFunction):
         types_correct = arg.type in (fluent.FluentNumber, dtypes.Number)
         if not types_correct and arg.type != types.Conflict:
             compiler_env.add_current_message_error(
-                error_types.TypeMismatch("NUMBER() expected numeric argument, found '{0}'".format(arg.type)),
+                error_types.TypeMismatch(f"NUMBER() expected numeric argument, found '{arg.type}'"),
                 [expr],
             )
         if types_correct and not kwargs:
@@ -1394,29 +1302,21 @@ class NumberFunction(FluentFunction):
                 options_updates[kw_name] = handler(kw_name, kw_value, local_scope, compiler_env)
 
             if arg.type == dtypes.Number:
-                default_opts = local_scope.add_assignment(
-                    "defaults_", local_scope.variables["NumberFormat.defaults"]
-                )
+                default_opts = local_scope.add_assignment("defaults_", local_scope.variables["NumberFormat.defaults"])
                 options = codegen.RecordUpdate(default_opts, **options_updates)
                 fnum = local_scope.add_assignment(
                     "fnum_",
-                    local_scope.variables["Fluent.formattedNumber"].apply(
-                        options, arg, ftl_source=ftl_source
-                    ),
+                    local_scope.variables["Fluent.formattedNumber"].apply(options, arg, ftl_source=ftl_source),
                 )
             else:
                 initial_opts = local_scope.add_assignment(
                     "initial_opts_",
-                    local_scope.variables["Fluent.numberFormattingOptions"].apply(
-                        arg, ftl_source=ftl_source
-                    ),
+                    local_scope.variables["Fluent.numberFormattingOptions"].apply(arg, ftl_source=ftl_source),
                 )
                 options = codegen.RecordUpdate(initial_opts, **options_updates)
                 fnum = local_scope.add_assignment(
                     "fnum_",
-                    local_scope.variables["Fluent.reformattedNumber"].apply(
-                        options, arg, ftl_source=ftl_source
-                    ),
+                    local_scope.variables["Fluent.reformattedNumber"].apply(options, arg, ftl_source=ftl_source),
                 )
             return fnum
 

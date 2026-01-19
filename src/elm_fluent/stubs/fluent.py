@@ -1,14 +1,17 @@
 """
 Stub to define types for the Fluent module
 """
+
 from .. import codegen, types
 from . import (
     date,
-    defaults as dtypes,
     html,
     intl_datetimeformat,
     intl_locale,
     intl_numberformat,
+)
+from . import (
+    defaults as dtypes,
 )
 
 module = codegen.Module(name="Fluent")
@@ -21,16 +24,12 @@ module.reserve_name("number", type=types.Function(dtypes.Number, FluentNumber))
 
 module.reserve_name(
     "formattedNumber",
-    type=types.Function.for_multiple_inputs(
-        [intl_numberformat.Options, dtypes.Number], FluentNumber
-    ),
+    type=types.Function.for_multiple_inputs([intl_numberformat.Options, dtypes.Number], FluentNumber),
 )
 
 module.reserve_name(
     "reformattedNumber",
-    type=types.Function.for_multiple_inputs(
-        [intl_numberformat.Options, FluentNumber], FluentNumber
-    ),
+    type=types.Function.for_multiple_inputs([intl_numberformat.Options, FluentNumber], FluentNumber),
 )
 
 module.reserve_name(
@@ -40,9 +39,7 @@ module.reserve_name(
 
 module.reserve_name(
     "formatNumber",
-    type=types.Function.for_multiple_inputs(
-        [intl_locale.Locale, FluentNumber], dtypes.String
-    ),
+    type=types.Function.for_multiple_inputs([intl_locale.Locale, FluentNumber], dtypes.String),
 )
 
 module.reserve_name("numberValue", type=types.Function(FluentNumber, dtypes.Number))
@@ -55,16 +52,12 @@ module.reserve_name("date", type=types.Function(date.Date, FluentDate))
 
 module.reserve_name(
     "formattedDate",
-    type=types.Function.for_multiple_inputs(
-        [intl_datetimeformat.Options, date.Date], FluentDate
-    ),
+    type=types.Function.for_multiple_inputs([intl_datetimeformat.Options, date.Date], FluentDate),
 )
 
 module.reserve_name(
     "reformattedDate",
-    type=types.Function.for_multiple_inputs(
-        [intl_datetimeformat.Options, FluentDate], FluentDate
-    ),
+    type=types.Function.for_multiple_inputs([intl_datetimeformat.Options, FluentDate], FluentDate),
 )
 
 module.reserve_name(
@@ -74,9 +67,7 @@ module.reserve_name(
 
 module.reserve_name(
     "formatDate",
-    type=types.Function.for_multiple_inputs(
-        [intl_locale.Locale, FluentDate], dtypes.String
-    ),
+    type=types.Function.for_multiple_inputs([intl_locale.Locale, FluentDate], dtypes.String),
 )
 
 
@@ -84,9 +75,7 @@ module.reserve_name(
     "selectAttributes",
     type=types.Function.for_multiple_inputs(
         [
-            dtypes.List.specialize(
-                a=types.Tuple(dtypes.String, dtypes.List.specialize(a=html.Attribute))
-            ),
+            dtypes.List.specialize(a=types.Tuple(dtypes.String, dtypes.List.specialize(a=html.Attribute))),
             dtypes.List.specialize(a=dtypes.String),
         ],
         dtypes.List.specialize(a=html.Attribute),

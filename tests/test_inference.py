@@ -23,11 +23,8 @@ def ftl_to_types(ftl):
     messages, junk = parse_ftl(source_text)
     message_ids_to_ast = OrderedDict(get_message_function_ast(messages))
     processing_order = get_processing_order(message_ids_to_ast)
-    sorted_message_ids = [
-        msg_id
-        for msg_id, i in sorted(processing_order.items(), key=lambda pair: pair[1])
-    ]
-    return infer_arg_types(message_ids_to_ast, sorted_message_ids, '<string>', source_text)
+    sorted_message_ids = [msg_id for msg_id, i in sorted(processing_order.items(), key=lambda pair: pair[1])]
+    return infer_arg_types(message_ids_to_ast, sorted_message_ids, "<string>", source_text)
 
 
 class FakeFtlSource:
@@ -36,13 +33,14 @@ class FakeFtlSource:
     object without requiring a real AST object for `expr`
     like `FtlSource` has.
     """
+
     def __init__(self, message_id, row, col):
         self.message_id = message_id
         self.row = row
         self.col = col
 
     def __repr__(self):
-        return "<FakeFtlSource {0} {1} {2}>".format(self.message_id, self.row, self.col)
+        return f"<FakeFtlSource {self.message_id} {self.row} {self.col}>"
 
     def __eq__(self, other):
         if isinstance(other, FtlSource):
@@ -56,44 +54,25 @@ class FakeFtlSource:
 def test_no_args():
     assert ftl_to_types("""
         foo = Hello
-    """) == {'foo': {}}
+    """) == {"foo": {}}
 
 
 def test_string():
     assert ftl_to_types("""
         foo = Hello { $name }
-    """) == {
-        'foo': {
-            'name': InferredType(type=String,
-                                 evidences=[FakeFtlSource('foo', 1, 15)])
-        }
-    }
+    """) == {"foo": {"name": InferredType(type=String, evidences=[FakeFtlSource("foo", 1, 15)])}}
 
 
 def test_number_function():
     assert ftl_to_types("""
         foo = You have { NUMBER($count) } emails!
-    """) == {
-        'foo': {
-            'count': InferredType(
-                type=Number,
-                evidences=[FakeFtlSource('foo', 1, 18)]
-            )
-        }
-    }
+    """) == {"foo": {"count": InferredType(type=Number, evidences=[FakeFtlSource("foo", 1, 18)])}}
 
 
 def test_datetime_function():
     assert ftl_to_types("""
        foo = Today is { DATETIME($today) }!
-    """) == {
-        'foo': {
-            'today': InferredType(
-                type=DateTime,
-                evidences=[FakeFtlSource('foo', 1, 18)]
-            )
-        }
-    }
+    """) == {"foo": {"today": InferredType(type=DateTime, evidences=[FakeFtlSource("foo", 1, 18)])}}
 
 
 def test_conflict():
@@ -102,19 +81,16 @@ def test_conflict():
            Today is { DATETIME($count) }!
            You have { NUMBER($count) } emails!
     """) == {
-        'foo': {
-            'count': Conflict(
+        "foo": {
+            "count": Conflict(
                 types=[
-                    InferredType(
-                        type=DateTime,
-                        evidences=[FakeFtlSource('foo', 2, 15)]
-                    ),
+                    InferredType(type=DateTime, evidences=[FakeFtlSource("foo", 2, 15)]),
                     InferredType(
                         type=Number,
-                        evidences=[FakeFtlSource('foo', 3, 15)],
+                        evidences=[FakeFtlSource("foo", 3, 15)],
                     ),
                 ],
-                message_source=FakeFtlSource('foo', 1, 1)
+                message_source=FakeFtlSource("foo", 1, 1),
             )
         }
     }
@@ -125,30 +101,24 @@ def test_called_message():
         bar = { foo }
         foo = Hello { $name }, you have { NUMBER($count) } emails.
     """)
-    assert arg_types['foo'] == {
-        'name': InferredType(
-            type=String,
-            evidences=[FakeFtlSource('foo', 2, 15)]
-        ),
-        'count': InferredType(
-            type=Number,
-            evidences=[FakeFtlSource('foo', 2, 35)]
-        ),
+    assert arg_types["foo"] == {
+        "name": InferredType(type=String, evidences=[FakeFtlSource("foo", 2, 15)]),
+        "count": InferredType(type=Number, evidences=[FakeFtlSource("foo", 2, 35)]),
     }
 
-    assert arg_types['bar'] == {
-        'name': InferredType(
+    assert arg_types["bar"] == {
+        "name": InferredType(
             type=String,
             evidences=[
-                FakeFtlSource('bar', 1, 9),  # We are calling foo
-                FakeFtlSource('foo', 2, 15),  # foo thinks 'name' is String
+                FakeFtlSource("bar", 1, 9),  # We are calling foo
+                FakeFtlSource("foo", 2, 15),  # foo thinks 'name' is String
             ],
         ),
-        'count': InferredType(
+        "count": InferredType(
             type=Number,
             evidences=[
-                FakeFtlSource('bar', 1, 9),  # We are calling foo
-                FakeFtlSource('foo', 2, 35),  # foo thinks 'count' is Number
+                FakeFtlSource("bar", 1, 9),  # We are calling foo
+                FakeFtlSource("foo", 2, 35),  # foo thinks 'count' is Number
             ],
         ),
     }
@@ -161,12 +131,12 @@ def test_select_number():
          }
     """)
     assert arg_types == {
-        'bar': {
-            'arg': InferredType(
+        "bar": {
+            "arg": InferredType(
                 type=Number,
                 evidences=[
-                    FakeFtlSource('bar', 2, 7),
-                ]
+                    FakeFtlSource("bar", 2, 7),
+                ],
             )
         }
     }
@@ -179,12 +149,12 @@ def test_select_plural_form():
          }
     """)
     assert arg_types == {
-        'bar': {
-            'arg': InferredType(
+        "bar": {
+            "arg": InferredType(
                 type=Number,
                 evidences=[
-                    FakeFtlSource('bar', 2, 7),
-                ]
+                    FakeFtlSource("bar", 2, 7),
+                ],
             )
         }
     }
@@ -198,13 +168,13 @@ def test_select_mixed_numeric():
          }
     """)
     assert arg_types == {
-        'bar': {
-            'arg': InferredType(
+        "bar": {
+            "arg": InferredType(
                 type=Number,
                 evidences=[
-                    FakeFtlSource('bar', 2, 7),
-                    FakeFtlSource('bar', 3, 7),
-                ]
+                    FakeFtlSource("bar", 2, 7),
+                    FakeFtlSource("bar", 3, 7),
+                ],
             )
         }
     }
@@ -217,12 +187,12 @@ def test_select_string():
          }
     """)
     assert arg_types == {
-        'bar': {
-            'arg': InferredType(
+        "bar": {
+            "arg": InferredType(
                 type=String,
                 evidences=[
-                    FakeFtlSource('bar', 2, 7),
-                ]
+                    FakeFtlSource("bar", 2, 7),
+                ],
             )
         }
     }
@@ -239,14 +209,14 @@ def test_select_string_with_plural_cat():
          }
     """)
     assert arg_types == {
-        'bar': {
-            'arg': InferredType(
+        "bar": {
+            "arg": InferredType(
                 type=String,
                 evidences=[
-                    FakeFtlSource('bar', 2, 7),
-                    FakeFtlSource('bar', 3, 7),
-                    FakeFtlSource('bar', 4, 7),
-                ]
+                    FakeFtlSource("bar", 2, 7),
+                    FakeFtlSource("bar", 3, 7),
+                    FakeFtlSource("bar", 4, 7),
+                ],
             )
         }
     }
@@ -260,23 +230,23 @@ def test_select_conflict():
          }
     """)
     assert arg_types == {
-        'bar': {
-            'arg': Conflict(
+        "bar": {
+            "arg": Conflict(
                 types=[
                     InferredType(
                         type=Number,
                         evidences=[
-                            FakeFtlSource('bar', 2, 7),
-                        ]
+                            FakeFtlSource("bar", 2, 7),
+                        ],
                     ),
                     InferredType(
                         type=String,
                         evidences=[
-                            FakeFtlSource('bar', 3, 7),
-                        ]
-                    )
+                            FakeFtlSource("bar", 3, 7),
+                        ],
+                    ),
                 ],
-                message_source=FakeFtlSource('bar', 1, 1),
+                message_source=FakeFtlSource("bar", 1, 1),
             )
         }
     }
@@ -287,25 +257,22 @@ def test_conflicting_called_message():
         bar = { foo } { NUMBER($name) }
         foo = Hello { $name }
     """)
-    assert arg_types['foo'] == {
-        'name': InferredType(
-            type=String,
-            evidences=[FakeFtlSource('foo', 2, 15)]
-        ),
+    assert arg_types["foo"] == {
+        "name": InferredType(type=String, evidences=[FakeFtlSource("foo", 2, 15)]),
     }
 
-    assert type(arg_types['bar']['name']) == Conflict
-    assert len(arg_types['bar']['name'].types) == 2
-    assert arg_types['bar']['name'].types[0] == InferredType(
+    assert type(arg_types["bar"]["name"]) == Conflict
+    assert len(arg_types["bar"]["name"].types) == 2
+    assert arg_types["bar"]["name"].types[0] == InferredType(
         type=String,
         evidences=[
-            FakeFtlSource('bar', 1, 9),  # We are calling foo
-            FakeFtlSource('foo', 2, 15),  # foo thinks 'name' is String
+            FakeFtlSource("bar", 1, 9),  # We are calling foo
+            FakeFtlSource("foo", 2, 15),  # foo thinks 'name' is String
         ],
     )
-    assert arg_types['bar']['name'].types[1] == InferredType(
+    assert arg_types["bar"]["name"].types[1] == InferredType(
         type=Number,
         evidences=[
-            FakeFtlSource('bar', 1, 17),  # NUMBER call
+            FakeFtlSource("bar", 1, 17),  # NUMBER call
         ],
     )

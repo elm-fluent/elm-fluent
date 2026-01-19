@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 """Console script for elm_fluent."""
+
 import os.path
 import time
 
@@ -15,7 +15,7 @@ from .utils import normpath
 
 
 @attr.s
-class CompilationOptions(object):
+class CompilationOptions:
     locales_fs = attr.ib()
     output_fs = attr.ib()
     locales_dir = attr.ib()
@@ -44,22 +44,15 @@ def get_output_fs(path):
     default="locales",
     help="Location of the locales directory that holds all FTL files.",
 )
-@click.option(
-    "--output-dir",
-    default=".",
-    help="Location of the outputted Elm files.")
+@click.option("--output-dir", default=".", help="Location of the outputted Elm files.")
 @click.option(
     "--when-missing",
     default="error",
     type=click.Choice(["error", "fallback"]),
     help="What to do when translations are missing for a locale, defaults to error",
 )
-@click.option(
-    "--default-locale", default="en", help="The default locale, used for fallbacks"
-)
-@click.option(
-    "--include", default="**/*.ftl", help="Glob pattern for the FTL files to include"
-)
+@click.option("--default-locale", default="en", help="The default locale, used for fallbacks")
+@click.option("--include", default="**/*.ftl", help="Glob pattern for the FTL files to include")
 @click.option(
     "--bdi-isolating/--no-bdi-isolating",
     default=True,
@@ -73,48 +66,47 @@ def get_output_fs(path):
 )
 @click.option("--verbose/--quiet", default=False, help="More verbose output")
 @click.option("--version", "version", flag_value=True, help="Print version and exit")
-def main(locales_dir,
-         output_dir,
-         when_missing,
-         default_locale,
-         include,
-         bdi_isolating,
-         watch,
-         verbose,
-         version,
-         ):
+def main(
+    locales_dir,
+    output_dir,
+    when_missing,
+    default_locale,
+    include,
+    bdi_isolating,
+    watch,
+    verbose,
+    version,
+):
     if version:
-        click.echo("elm-fluent {0}".format(__version__))
+        click.echo(f"elm-fluent {__version__}")
         return
 
     if os.path.isabs(locales_dir):
-        locales_fs = get_locales_fs('/')
+        locales_fs = get_locales_fs("/")
     else:
-        locales_fs = get_locales_fs('.')
+        locales_fs = get_locales_fs(".")
 
     if os.path.isabs(output_dir):
-        output_fs = get_output_fs('/')
+        output_fs = get_output_fs("/")
     else:
-        output_fs = get_output_fs('.')
+        output_fs = get_output_fs(".")
 
     if not locales_fs.exists(locales_dir) or not locales_fs.isdir(locales_dir):
         raise click.UsageError(
-            "Locales directory '{0}' does not exist. Please specify a correct locales "
-            "directory using the --locales-dir option".format(locales_dir)
+            f"Locales directory '{locales_dir}' does not exist. Please specify a correct locales "
+            "directory using the --locales-dir option"
         )
 
     if not output_fs.exists(output_dir) or not output_fs.isdir(output_dir):
         raise click.UsageError(
-            "Output directory '{0}' does not exist. Please specify a correct output "
-            "directory using the --output-dir option".format(output_dir)
+            f"Output directory '{output_dir}' does not exist. Please specify a correct output "
+            "directory using the --output-dir option"
         )
 
     if when_missing == "error":
         missing_translation_strategy = ErrorWhenMissing()
     elif when_missing == "fallback":
-        missing_translation_strategy = FallbackToDefaultLocaleWhenMissing(
-            default_locale
-        )
+        missing_translation_strategy = FallbackToDefaultLocaleWhenMissing(default_locale)
 
     options = CompilationOptions(
         locales_fs=locales_fs,
@@ -132,8 +124,7 @@ def main(locales_dir,
         run_compile_and_ignore_abort(options)
         observer = watchdog.observers.Observer()
         handler = RunCompileEventHandler(options)
-        observer.schedule(handler, normpath(options.locales_fs, options.locales_dir),
-                          recursive=True)
+        observer.schedule(handler, normpath(options.locales_fs, options.locales_dir), recursive=True)
         observer.start()
         try:
             while True:

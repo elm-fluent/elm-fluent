@@ -18,7 +18,7 @@ def with_auto_env(meth):
 
 
 @attr.s
-class SignatureEnv(object):
+class SignatureEnv:
     """
     Environment object for creating type/function signatures
     """
@@ -26,22 +26,17 @@ class SignatureEnv(object):
     used_type_variables = attr.ib(factory=dict)
 
 
-class ElmType(object):
-
+class ElmType:
     def apply_args(self, args):
         if len(args) > 0:
-            raise AssertionError(
-                "{0} is not a function, cannot apply arguments to it".format(self)
-            )
+            raise AssertionError(f"{self} is not a function, cannot apply arguments to it")
         return self
 
     def signature_sub_types(self):
         """
         Returns all the type objects that would appear in a signature
         """
-        raise NotImplementedError(
-            "{0} needs to implement signature_sub_types".format(self.__class__)
-        )
+        raise NotImplementedError(f"{self.__class__} needs to implement signature_sub_types")
 
 
 class UnconstrainedType(ElmType):
@@ -72,7 +67,7 @@ class TypeParam(UnconstrainedType):
         candidate = self.preferred_name
         while candidate in env.used_type_variables:
             c = c + 1
-            candidate = "{0}{1}".format(self.preferred_name, c)
+            candidate = f"{self.preferred_name}{c}"
         env.used_type_variables[candidate] = self
         return candidate
 
@@ -83,9 +78,7 @@ class TypeParam(UnconstrainedType):
 
 
 class Type(ElmType):
-    def __init__(
-        self, full_name, module, params=None, constructors=None, reserve_names=True
-    ):
+    def __init__(self, full_name, module, params=None, constructors=None, reserve_names=True):
         """
         Construct a union type.
         constructors is a list of constructors, where each constructor is a:
@@ -94,9 +87,7 @@ class Type(ElmType):
         """
 
         if " " in full_name:
-            assert (
-                params is None
-            ), "Either pass params, or auto created using spaces in name"
+            assert params is None, "Either pass params, or auto created using spaces in name"
             parts = full_name.split(" ")
             name, param_names = parts[0], tuple(parts[1:])
             params = [TypeParam(p) for p in param_names]
@@ -120,20 +111,16 @@ class Type(ElmType):
                 constructor_type = self
             else:
                 name, params = c[0], tuple(c[1:])
-                params = [
-                    self.param_dict[p] if isinstance(p, str) else p
-                    for p in params
-                ]
+                params = [self.param_dict[p] if isinstance(p, str) else p for p in params]
                 constructor_type = Function.for_multiple_inputs(params, self)
 
             if reserve_names:
                 reserved_name = module.reserve_name(name, type=constructor_type)
-                assert reserved_name == name, "Expected {0} == {1}".format(
-                    reserved_name, name
-                )
+                assert reserved_name == name, f"Expected {reserved_name} == {name}"
 
             if module.is_default_imports:
                 from . import codegen
+
                 # For builtins, we attach a name to self for easy access.
                 attr_name = name
                 # For 'True', 'False' etc, we have to avoid a clash with Python keywords.
@@ -147,23 +134,18 @@ class Type(ElmType):
         return self._is_compatible(other) and (self.param_dict == other.param_dict)
 
     def _is_compatible(self, other):
-        return (isinstance(other, Type)
-                and (self.module == other.module)
-                and (self.name == other.name))
+        return isinstance(other, Type) and (self.module == other.module) and (self.name == other.name)
 
     def __str__(self):
         return self.as_signature(dummy_module)
 
     def __repr__(self):
-        return "<ElmType: {0}>".format(str(self))
+        return f"<ElmType: {str(self)}>"
 
     @with_auto_env
     def as_signature(self, from_module, env=None):
-        return "{0}{1}".format(
-            from_module.get_name_qualifier(self.module), self.name
-        ) + "".join(
-            " " + type_paren_wrap(t.as_signature(from_module, env=env))
-            for n, t in self.param_dict.items()
+        return f"{from_module.get_name_qualifier(self.module)}{self.name}" + "".join(
+            " " + type_paren_wrap(t.as_signature(from_module, env=env)) for n, t in self.param_dict.items()
         )
 
     def signature_sub_types(self):
@@ -173,43 +155,31 @@ class Type(ElmType):
         retval = self.clone()
         for name, type_obj in params.items():
             if name not in retval.param_dict:
-                raise LookupError(
-                    "{0} is not a parameter of type {1}".format(name, self)
-                )
+                raise LookupError(f"{name} is not a parameter of type {self}")
             retval.param_dict[name] = type_obj
         return retval
 
     def clone(self):
-        retval = self.__class__(
-            self.name, self.module, params=None, constructors=None, reserve_names=False
-        )
+        retval = self.__class__(self.name, self.module, params=None, constructors=None, reserve_names=False)
         retval.param_dict.update(self.param_dict)
         return retval
 
 
 class Tuple(Type):
     def __init__(self, *param_types):
-        type_params = [
-            TypeParam(chr(ord("a") + i)) for i in range(len(param_types))
-        ]
-        super(Tuple, self).__init__(
-            "Tuple", None, params=type_params, reserve_names=False
-        )
+        type_params = [TypeParam(chr(ord("a") + i)) for i in range(len(param_types))]
+        super(Tuple, self).__init__("Tuple", None, params=type_params, reserve_names=False)
         for type_param, param_type in zip(type_params, param_types):
             self.param_dict[type_param.preferred_name] = param_type
 
     @with_auto_env
     def as_signature(self, from_module, env=None):
-        return "({0})".format(
-            ", ".join(
-                t.as_signature(from_module, env=env) for n, t in self.param_dict.items()
-            )
-        )
+        return f"({', '.join(t.as_signature(from_module, env=env) for n, t in self.param_dict.items())})"
 
 
 def type_paren_wrap(sig):
     if " " in sig and not (sig.startswith("(") and sig.endswith(")")):
-        return "({0})".format(sig)
+        return f"({sig})"
     else:
         return sig
 
@@ -248,7 +218,7 @@ class Record(ElmType):
     def as_signature(self, from_module, env=None):
         def fields_signature():
             return ", ".join(
-                "{0} : {1}".format(name, type_obj.as_signature(from_module, env=env))
+                f"{name} : {type_obj.as_signature(from_module, env=env)}"
                 for name, type_obj in sorted(self.fields.items())
             )
 
@@ -273,12 +243,14 @@ class Function(ElmType):
         self.output_type = output_type
 
     def __repr__(self):
-        return "<Function: {0}>".format(self.as_signature(dummy_module))
+        return f"<Function: {self.as_signature(dummy_module)}>"
 
     def __eq__(self, other):
-        return (isinstance(other, Function)
-                and (self.input_type == other.input_type)
-                and (self.output_type == other.output_type))
+        return (
+            isinstance(other, Function)
+            and (self.input_type == other.input_type)
+            and (self.output_type == other.output_type)
+        )
 
     @staticmethod
     def for_multiple_inputs(input_types, output_type):
@@ -294,10 +266,7 @@ class Function(ElmType):
 
     @with_auto_env
     def as_signature(self, from_module, env=None):
-        return "{0} -> {1}".format(
-            self.input_type.as_signature(from_module, env=env),
-            self.output_type.as_signature(from_module, env=env),
-        )
+        return f"{self.input_type.as_signature(from_module, env=env)} -> {self.output_type.as_signature(from_module, env=env)}"
 
     def signature_sub_types(self):
         return [self.input_type, self.output_type]
@@ -313,7 +282,7 @@ class Function(ElmType):
         return self.output_type.apply_args(remainder)
 
 
-class DummyModule(object):
+class DummyModule:
     def get_name_qualifier(self, module):
         return ""
 

@@ -1,8 +1,10 @@
 """
 Stub to define types for the Intl.NumberFormat module
 """
+
 from .. import codegen, types
-from . import defaults as dtypes, intl_locale
+from . import defaults as dtypes
+from . import intl_locale
 
 module = codegen.Module(name="Intl.NumberFormat")
 
@@ -35,7 +37,5 @@ module.reserve_name("fromOptions", type=types.Function(Options, NumberFormat))
 
 module.reserve_name(
     "format",
-    type=types.Function.for_multiple_inputs(
-        [NumberFormat, dtypes.Number], dtypes.String
-    ),
+    type=types.Function.for_multiple_inputs([NumberFormat, dtypes.Number], dtypes.String),
 )

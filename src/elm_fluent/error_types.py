@@ -16,7 +16,7 @@ class FluentError:
         return (other.__class__ == self.__class__) and other.message == self.message
 
     def __repr__(self):
-        return '<{0}: {1!r}>'.format(self.__class__.__name__, self.message)
+        return f"<{self.__class__.__name__}: {self.message!r}>"
 
     def __hash__(self):
         return hash(self.message)
@@ -52,19 +52,12 @@ class TypeMismatch(FluentError):
     def display(self):
         output = []
         primary_source = self.error_sources[0]
-        output.append("{0}: In message '{1}': {2}".format(
-            primary_source.display_location(),
-            primary_source.message_id,
-            self.message
-        ))
+        output.append(f"{primary_source.display_location()}: In message '{primary_source.message_id}': {self.message}")
         if len(self.error_sources) > 1:
             output.append("  Compare to:")
             for source in self.error_sources[1:]:
-                output.append("    {0}: {1}".format(
-                    source.display_location(),
-                    source.expr_as_text(),
-                ))
-        return '\n'.join(output)
+                output.append(f"    {source.display_location()}: {source.expr_as_text()}")
+        return "\n".join(output)
 
 
 class HtmlTypeMismatch(FluentError):
@@ -88,27 +81,24 @@ class ArgumentConflictError:
 
     def display(self):
         from . import inference
+
         output = []
         if self.master:
-            output.append("For master '{0}' function: Conflicting inferred types for argument '${1}'".format(
-                self.message_id,
-                self.arg_name,
-            ))
+            output.append(
+                f"For master '{self.message_id}' function: Conflicting inferred types for argument '${self.arg_name}'"
+            )
         else:
             source = self.conflict.message_source
-            output.append("{0}: In message '{1}': Conflicting inferred types for argument '${2}'".format(
-                source.display_location(),
-                self.message_id,
-                self.arg_name,
-            ))
+            output.append(
+                f"{source.display_location()}: In message '{self.message_id}': Conflicting inferred types for argument '${self.arg_name}'"
+            )
 
         inferred_types = self.conflict.types
         if inferred_types:
             output.append("  Compare the following:")
             for inferred_type in inferred_types:
                 for evidence in inferred_type.evidences:
-                    output.append("    {0}: Inferred type: {1}".format(
-                        evidence.display_location(), inferred_type.type.name))
+                    output.append(f"    {evidence.display_location()}: Inferred type: {inferred_type.type.name}")
 
             if any(inferred_type.type == inference.String for inferred_type in inferred_types):
                 output.append("")
