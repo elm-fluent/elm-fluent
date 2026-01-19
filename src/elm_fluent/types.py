@@ -168,7 +168,7 @@ class Type(ElmType):
 class Tuple(Type):
     def __init__(self, *param_types):
         type_params = [TypeParam(chr(ord("a") + i)) for i in range(len(param_types))]
-        super(Tuple, self).__init__("Tuple", None, params=type_params, reserve_names=False)
+        super().__init__("Tuple", None, params=type_params, reserve_names=False)
         for type_param, param_type in zip(type_params, param_types):
             self.param_dict[type_param.preferred_name] = param_type
 
@@ -208,28 +208,26 @@ class Record(ElmType):
             return
         if self.fixed:
             raise AssertionError(
-                "Cannot add field {0} to a fixed record type, only {1} available".format(
-                    name, ", ".join(self.fields.keys())
-                )
+                f"Cannot add field {name} to a fixed record type, only {', '.join(self.fields.keys())} available"
             )
         self.fields[name] = type_obj
 
     @with_auto_env
     def as_signature(self, from_module, env=None):
-        def fields_signature():
+        def fields_signature() -> str:
             return ", ".join(
                 f"{name} : {type_obj.as_signature(from_module, env=env)}"
                 for name, type_obj in sorted(self.fields.items())
             )
 
         if self.fixed:
-            return "{ %s }" % fields_signature()
+            return "{ " + fields_signature() + " }"
         else:
             base = UnconstrainedType().as_signature(from_module, env=env)
             if not self.fields:
                 return base
             else:
-                return "{ %s | %s }" % (base, fields_signature())
+                return "{ " + base + " | " + fields_signature() + " }"
 
     def signature_sub_types(self):
         return self.fields.values()
@@ -293,8 +291,7 @@ dummy_module = DummyModule()
 def signature_traverse(type_obj):
     sub_parts = type_obj.signature_sub_types()
     for part in sub_parts:
-        for t in signature_traverse(part):
-            yield t
+        yield from signature_traverse(part)
     yield type_obj
 
 

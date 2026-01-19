@@ -69,7 +69,7 @@ def run_compile(options):
         raise click.UsageError(
             f"No locale directories (directories containing .ftl files) found in {normpath(options.locales_fs, options.locales_dir)} directory"
         )
-    bad_locales = [l for l in locales if not language_tags.tags.check(l)]
+    bad_locales = [locale for locale in locales if not language_tags.tags.check(locale)]
     if bad_locales:
         raise click.UsageError(
             f"The following directory names are not valid BCP 47 language tags: {', '.join(bad_locales)}"
@@ -241,7 +241,7 @@ def module_name_for_stem(ftl_stem, locale=None, master=False):
     else:
         first_part = module_name_for_locale(locale)
 
-    return "Ftl.{0}.{1}".format(
+    return "Ftl.{}.{}".format(
         first_part,
         ".".join(part.title() for part in ftl_stem.replace(".ftl", "").split("/")),
     )
@@ -279,8 +279,8 @@ def find_all_ftl_stems(locales_fs, locales_dir, include_glob, locales):
     there is a single ftl stem, 'foo/bar.ftl'
     """
     ftl_stems = set([])
-    for l in locales:
-        locale_base_fs = locales_fs.opendir(os.path.join(locales_dir, l))
+    for locale in locales:
+        locale_base_fs = locales_fs.opendir(os.path.join(locales_dir, locale))
         ftl_files = [m.path.lstrip("/") for m in locale_base_fs.glob(include_glob) if is_ftl(m.path)]
         ftl_stems |= set(ftl_files)
     return sorted(list(ftl_stems))

@@ -136,7 +136,7 @@ def _make_attr_id(parent_ref_id, attr_name):
     """
     Given a parent id and the attribute name, return the attribute id
     """
-    return "".join([parent_ref_id, ATTRIBUTE_SEPARATOR, attr_name])
+    return f"{parent_ref_id}{ATTRIBUTE_SEPARATOR}{attr_name}"
 
 
 def get_term_used_variables(term, compiler_env):

@@ -111,7 +111,7 @@ def dom_nodes_to_elm(nodes, expr_replacements, local_scope, compiler_env):
 
 class HtmlList(codegen.List):
     def simplify(self, changes):
-        retval = super(HtmlList, self).simplify(changes)
+        retval = super().simplify(changes)
         if retval is not self:
             return retval
 
@@ -141,7 +141,7 @@ class HtmlListConcat(codegen.ListConcat):
     literal = HtmlList
 
     def __init__(self, parts):
-        super(HtmlListConcat, self).__init__(parts, html_output_type)
+        super().__init__(parts, html_output_type)
 
 
 def replace_non_text_expressions(elements):

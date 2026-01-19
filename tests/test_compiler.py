@@ -685,7 +685,7 @@ class TestCompiler(unittest.TestCase):
         assert len(errs) == 1
         err = errs[0]
         assert err.error_sources[0].message_id == "foo"
-        assert type(err.error_sources[0].expr) == ast.StringLiteral
+        assert type(err.error_sources[0].expr) is ast.StringLiteral
         assert err == error_types.FunctionParameterError(
             '''Expecting a number (0 or 1) for useGrouping parameter, got "hello"'''
         )
@@ -700,7 +700,7 @@ class TestCompiler(unittest.TestCase):
         assert len(errs) == 1
         err = errs[0]
         assert err.error_sources[0].message_id == "foo"
-        assert type(err.error_sources[0].expr) == ast.StringLiteral
+        assert type(err.error_sources[0].expr) is ast.StringLiteral
         assert err == error_types.FunctionParameterError(
             '''Expecting a number for minimumSignificantDigits parameter, got "hello"'''
         )
@@ -742,11 +742,11 @@ class TestCompiler(unittest.TestCase):
         )
         code, errs = compile_messages_to_elm(src, self.locale)
         err = errs[0]
-        assert type(err) == error_types.ArgumentConflictError
+        assert type(err) is error_types.ArgumentConflictError
         assert err.message_id == "foo"
         assert err.arg_name == "arg"
         conflict = err.conflict
-        assert type(conflict) == inference.Conflict
+        assert type(conflict) is inference.Conflict
         types = conflict.types
         assert len(types) == 2
 
@@ -787,7 +787,7 @@ class TestCompiler(unittest.TestCase):
         code, errs = compile_messages_to_elm(src, self.locale)
         assert len(errs) == 1
         err = errs[0]
-        assert type(err) == error_types.ArgumentConflictError
+        assert type(err) is error_types.ArgumentConflictError
         assert err.arg_name == "arg"
         assert err.message_id == "foo"
         conflict = err.conflict
@@ -820,7 +820,7 @@ class TestCompiler(unittest.TestCase):
         code, errs = compile_messages_to_elm(src, self.locale)
         assert len(errs) == 1
         err = errs[0]
-        assert type(err) == error_types.ArgumentConflictError
+        assert type(err) is error_types.ArgumentConflictError
         assert err.arg_name == "arg"
         assert err.message_id == "foo"
         conflict = err.conflict
@@ -849,7 +849,7 @@ class TestCompiler(unittest.TestCase):
             self.locale,
         )
         assert len(errs) == 1
-        assert type(errs[0]) == error_types.ArgumentConflictError
+        assert type(errs[0]) is error_types.ArgumentConflictError
 
     def test_message_with_attrs(self):
         code, errs = compile_messages_to_elm(

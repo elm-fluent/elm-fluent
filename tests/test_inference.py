@@ -261,7 +261,7 @@ def test_conflicting_called_message():
         "name": InferredType(type=String, evidences=[FakeFtlSource("foo", 2, 15)]),
     }
 
-    assert type(arg_types["bar"]["name"]) == Conflict
+    assert type(arg_types["bar"]["name"]) is Conflict
     assert len(arg_types["bar"]["name"].types) == 2
     assert arg_types["bar"]["name"].types[0] == InferredType(
         type=String,

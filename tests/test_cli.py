@@ -24,7 +24,7 @@ class StandardLayoutMixin:
     locales = ["en"]
 
     def setUp(self):
-        super(StandardLayoutMixin, self).setUp()
+        super().setUp()
         self.runner = CliRunner()
         self.locales_fs = MemoryFS()
         self.output_fs = MemoryFS()
@@ -43,12 +43,12 @@ class StandardLayoutMixin:
 
     def tearDown(self):
         self.locales_fs_patcher.stop()
-        super(StandardLayoutMixin, self).tearDown()
+        super().tearDown()
 
     def setup_fs(self):
         sub = self.locales_fs.makedir("locales")
-        for l in self.locales:
-            sub.makedir(l)
+        for locale in self.locales:
+            sub.makedir(locale)
 
     def write_ftl_file(self, path, contents):
         self.locales_fs.writetext(path, dedent_ftl(contents))
@@ -430,7 +430,7 @@ Aborted!
 
 class TestFileSelection(StandardLayoutMixin, unittest.TestCase):
     def setUp(self):
-        super(TestFileSelection, self).setUp()
+        super().setUp()
         self.write_ftl_file(
             "locales/en/foo.ftl",
             """

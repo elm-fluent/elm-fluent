@@ -21,13 +21,14 @@ def noisy_check_call(cmd):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="End to end doesn't work since Elm 0.19, it's harder to install older versions")
 class TestEndToEnd(unittest.TestCase):
     visible = os.environ.get("TEST_SHOW_BROWSER", "0") == "1"
     use_network = os.environ.get("TEST_NO_NETWORK", "0") != "1"
 
     @classmethod
     def setUpClass(cls):
-        super(TestEndToEnd, cls).setUpClass()
+        super().setUpClass()
         if not cls.visible:
             display_args = {"visible": False}
             cls.__display = Display(**display_args)
@@ -39,7 +40,7 @@ class TestEndToEnd(unittest.TestCase):
         cls.browser.quit()
         if not cls.visible:
             cls.__display.stop()
-        super(TestEndToEnd, cls).tearDownClass()
+        super().tearDownClass()
 
     def test_everything(self):
         os.chdir(TEST_PROJECT)

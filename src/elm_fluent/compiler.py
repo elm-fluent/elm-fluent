@@ -316,8 +316,8 @@ def compile_master(module_name, locales, locale_modules, message_mapping, locale
         lower_cased_locale_tag_expr = function.variables["String.toLower"].apply(locale_tag_expr)
         case_expr = codegen.Case(lower_cased_locale_tag_expr, parent_scope=function)
 
-        def do_call(l):
-            return function.variables[f"{locale_module_local_names[l]}.{func_name}"].apply(
+        def do_call(locale):
+            return function.variables[f"{locale_module_local_names[locale]}.{func_name}"].apply(
                 *[function.variables[a] for a in function_args_for_func_name(func_name)]
             )
 
@@ -784,13 +784,10 @@ def compile_expr_term_reference(reference, local_scope, compiler_env):
             if kwarg_name not in used_variables:
                 bad_kwarg = True
                 if len(used_variables) > 0:
+                    used_variables_list = ", ".join(sorted(used_variables))
                     compiler_env.add_current_message_error(
                         error_types.TermParameterError(
-                            "Parameter '{0}' was passed to term '{1}' which does not take this parameter. Did you mean: {2}?".format(
-                                kwarg_name,
-                                term_id,
-                                ", ".join(sorted(used_variables)),
-                            )
+                            f"Parameter '{kwarg_name}' was passed to term '{term_id}' which does not take this parameter. Did you mean: {used_variables_list}?"
                         ),
                         [reference],
                     )
@@ -1154,13 +1151,10 @@ def maybe_int_parameter(name, param_value, local_scope, compiler_env):
 def enum_parameter(enum_type, mapping):
     def parameter_handler(param_name, param_value, local_scope, compiler_env):
         if not isinstance(param_value, codegen.String) or param_value.string_value not in mapping:
+            mapping_keys = ", ".join(f'"{k}"' for k in sorted(mapping.keys()))
             compiler_env.add_current_message_error(
                 error_types.FunctionParameterError(
-                    "Expecting one of {0} for {1} parameter, got {2}".format(
-                        ", ".join(f'"{k}"' for k in sorted(mapping.keys())),
-                        param_name,
-                        param_value.ftl_source.expr_as_text(),
-                    )
+                    f"Expecting one of {mapping_keys} for {param_name} parameter, got {param_value.ftl_source.expr_as_text()}"
                 ),
                 [param_value.ftl_source.expr],
             )

@@ -75,7 +75,7 @@ class Scope(ElmAst):
     is_default_imports = False
 
     def __init__(self, parent_scope=None):
-        super(Scope, self).__init__()
+        super().__init__()
         self.parent_scope = parent_scope
         self.names = set()
         self._function_arg_reserved_names = set()
@@ -234,7 +234,7 @@ class Module(Scope):
     def __init__(self, name=None):
         from .stubs.defaults import default_imports
 
-        super(Module, self).__init__(parent_scope=default_imports)
+        super().__init__(parent_scope=default_imports)
         self.statements = {}  # Dict from statement number to statement
         self.exports = []
         self.import_dict = {}  # Map from local name to module
@@ -244,7 +244,7 @@ class Module(Scope):
         return f"<Module {self.name}>"
 
     def all_reserved_names(self):
-        return super(Module, self).all_reserved_names() | ELM_KEYWORDS
+        return super().all_reserved_names() | ELM_KEYWORDS
 
     def get_imported_module(self, import_name):
         # Here to avoid circular imports. TODO CLEANUP - more generic mechanism for
@@ -356,7 +356,7 @@ class _Assignment(Statement):
 
 class Function(Scope, Statement):
     def __init__(self, name, args=None, parent_scope=None, function_type=None):
-        super(Function, self).__init__(parent_scope=parent_scope)
+        super().__init__(parent_scope=parent_scope)
         self.func_name = name
         self.body = Let(parent_scope=self)
         if args is None:
@@ -653,7 +653,7 @@ class String(fixed_type("String"), Literal):
 
     def build_source(self, builder):
         # TODO - escapes for other chars?
-        builder.add_part('"{0}"'.format(self.string_value.replace('"', '\\"').replace("\n", "\\n")))
+        builder.add_part('"{}"'.format(self.string_value.replace('"', '\\"').replace("\n", "\\n")))
 
 
 class Number(fixed_type("Number"), Literal):
@@ -945,6 +945,5 @@ def simplify(source_code):
 def traverse(node):
     sub_parts = node.sub_expressions()
     for part in sub_parts:
-        for t in traverse(part):
-            yield t
+        yield from traverse(part)
     yield node
