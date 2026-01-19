@@ -2,6 +2,13 @@
 History
 =======
 
+0.7.0 (2026-??-??)
+------------------
+* Dropped official support for Python < 3.10, added official support for Python
+  3.10 and later.
+* Fixed bug with ``ftl2elm --watch`` mode triggering on too many file system events.
+* Cleanups.
+
 0.6.0 (2020-04-09)
 ------------------
 * Big rewrite of the type inference/checking mechanism, with more accurate
