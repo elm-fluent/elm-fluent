@@ -3,9 +3,9 @@ import unittest
 from unittest import mock
 
 from click.testing import CliRunner
-from fs.memoryfs import MemoryFS
 
 from elm_fluent import cli
+from elm_fluent.filesystem import MemoryFileSystem
 
 from .utils import dedent_ftl
 
@@ -26,8 +26,8 @@ class StandardLayoutMixin:
     def setUp(self):
         super().setUp()
         self.runner = CliRunner()
-        self.locales_fs = MemoryFS()
-        self.output_fs = MemoryFS()
+        self.locales_fs = MemoryFileSystem()
+        self.output_fs = MemoryFileSystem()
 
         def get_locales_fs(path):
             return self.locales_fs.opendir(path)
@@ -54,7 +54,7 @@ class StandardLayoutMixin:
         self.locales_fs.writetext(path, dedent_ftl(contents))
 
     def get_all_files(self, fs):
-        return {p: fs.readtext(p) for p in fs.walk.files()}
+        return {p: fs.readtext(p) for p in fs.walk_files()}
 
     def assertFileSystemEquals(self, fs, files):
         all_files = self.get_all_files(fs)

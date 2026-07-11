@@ -34,7 +34,6 @@ dependencies = [
     "beautifulsoup4>=4.6.3",
     "click>=6.0",
     "fluent-syntax>=0.15",
-    "fs>=2.4.2",
     "language-tags>=0.4.4",
     "lxml>=4.2.4",
     "watchdog>=0.8.3",

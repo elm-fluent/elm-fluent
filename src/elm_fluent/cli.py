@@ -8,17 +8,16 @@ from typing import Literal
 import click
 import watchdog.events
 import watchdog.observers
-from fs.osfs import OSFS
-
 from . import __version__
+from .filesystem import FileSystem
 from .run import ErrorWhenMissing, FallbackToDefaultLocaleWhenMissing, MissingTranslationStrategy, run_compile
 from .utils import normpath
 
 
 @dataclass
 class CompilationOptions:
-    locales_fs: OSFS
-    output_fs: OSFS
+    locales_fs: FileSystem
+    output_fs: FileSystem
     locales_dir: str
     output_dir: str
     include: str
@@ -32,11 +31,11 @@ class CompilationOptions:
 # doesn't seem to be a way to pass other extra kwargs to 'main' function
 # below.
 def get_locales_fs(path):
-    return OSFS(path)
+    return FileSystem(path)
 
 
 def get_output_fs(path):
-    return OSFS(path)
+    return FileSystem(path)
 
 
 @click.command()
