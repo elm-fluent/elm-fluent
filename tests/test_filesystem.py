@@ -25,12 +25,11 @@ class TestGlobToRegex:
         assert not regex.match("a/foo.txt")
 
 
-
 class TestMemoryFileSystem:
     def test_makedir_and_exists(self):
         fs = MemoryFileSystem()
         assert fs.exists("/")
-        sub = fs.makedir("mydir")
+        fs.makedir("mydir")
         assert fs.exists("mydir")
         assert fs.isdir("mydir")
 

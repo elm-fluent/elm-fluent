@@ -8,6 +8,7 @@ from typing import Literal
 import click
 import watchdog.events
 import watchdog.observers
+
 from . import __version__
 from .filesystem import FileSystem
 from .run import ErrorWhenMissing, FallbackToDefaultLocaleWhenMissing, MissingTranslationStrategy, run_compile
