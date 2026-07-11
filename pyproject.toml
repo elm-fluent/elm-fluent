@@ -71,6 +71,13 @@ dev = [
 [project.scripts]
 ftl2elm = "elm_fluent.cli:main"
 
+[tool.pytest.ini_options]
+addopts = "--ignore=docs"
+norecursedirs = "elm-stuff"
+markers = [
+    "slow: Slow tests",
+]
+
 [tool.ruff]
 line-length = 120
 target-version = 'py310'
@@ -79,5 +86,5 @@ target-version = 'py310'
 extend-select = [
   "UP",  # enable pyupgrade
   "I",  # enable isort
-  "FLY",  # enably flynt
+  "FLY",  # enable flynt
 ]
