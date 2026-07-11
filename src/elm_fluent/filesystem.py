@@ -12,6 +12,17 @@ from dataclasses import dataclass
 from typing import Iterator
 
 
+def _strip_translate_anchor(translated: str) -> str:
+    """Remove the trailing anchor from fnmatch.translate() output.
+
+    Python <=3.13 uses \\Z, Python 3.14+ uses \\z.
+    """
+    for suffix in (r"\Z", r"\z"):
+        if translated.endswith(suffix):
+            return translated[: -len(suffix)]
+    return translated
+
+
 def _glob_to_regex(pattern: str) -> re.Pattern[str]:
     """Convert a glob pattern (with ** support) to a regex.
 
@@ -26,10 +37,9 @@ def _glob_to_regex(pattern: str) -> re.Pattern[str]:
             part = part.lstrip("/")
         if i < len(parts) - 1:
             part = part.rstrip("/")
-        # Convert fnmatch pattern to regex (without the \Z anchor)
+        # Convert fnmatch pattern to regex (without the end anchor)
         translated = fnmatch.translate(part)
-        # Remove the trailing \Z (end anchor)
-        translated = translated.removesuffix(r"\Z")
+        translated = _strip_translate_anchor(translated)
         regex_parts.append(translated)
     # Join with pattern that matches any path segments (including empty)
     result = r"(?:.*/)?" .join(regex_parts) + r"\Z"
