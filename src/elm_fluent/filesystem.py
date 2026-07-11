@@ -8,8 +8,8 @@ import fnmatch
 import os
 import pathlib
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
 
 
 def _strip_translate_anchor(translated: str) -> str:
@@ -42,7 +42,7 @@ def _glob_to_regex(pattern: str) -> re.Pattern[str]:
         translated = _strip_translate_anchor(translated)
         regex_parts.append(translated)
     # Join with pattern that matches any path segments (including empty)
-    result = r"(?:.*/)?" .join(regex_parts) + r"\Z"
+    result = r"(?:.*/)?".join(regex_parts) + r"\Z"
     return re.compile(result)
 
 
@@ -213,7 +213,7 @@ class MemoryFileSystem:
         # Check files
         for fpath in self._files:
             if fpath.startswith(prefix):
-                rest = fpath[len(prefix):]
+                rest = fpath[len(prefix) :]
                 name = rest.split("/")[0]
                 if name not in seen:
                     seen.add(name)
@@ -223,7 +223,7 @@ class MemoryFileSystem:
         # Check directories
         for dpath in self._dirs:
             if dpath.startswith(prefix):
-                rest = dpath[len(prefix):]
+                rest = dpath[len(prefix) :]
                 name = rest.split("/")[0]
                 if name and name not in seen:
                     seen.add(name)
@@ -258,8 +258,7 @@ class MemoryFileSystem:
         return data
 
     def walk_files(self) -> Iterator[str]:
-        for fpath in sorted(self._files.keys()):
-            yield fpath
+        yield from sorted(self._files.keys())
 
 
 class _MemorySubFS(MemoryFileSystem):
@@ -302,7 +301,7 @@ class _MemorySubFS(MemoryFileSystem):
         prefix = self._root_prefix + "/"
         for fpath in sorted(self._parent._files.keys()):
             if fpath.startswith(prefix):
-                rel = fpath[len(prefix):]
+                rel = fpath[len(prefix) :]
                 if regex.match(rel):
                     yield GlobMatch(path="/" + rel)
 
@@ -319,4 +318,4 @@ class _MemorySubFS(MemoryFileSystem):
         prefix = self._root_prefix + "/"
         for fpath in sorted(self._parent._files.keys()):
             if fpath.startswith(prefix):
-                yield "/" + fpath[len(prefix):]
+                yield "/" + fpath[len(prefix) :]
