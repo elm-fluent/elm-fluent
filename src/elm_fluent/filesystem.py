@@ -7,43 +7,8 @@ Provides a thin wrapper around pathlib/os operations, supporting the
 import fnmatch
 import os
 import pathlib
-import re
 from collections.abc import Iterator
 from dataclasses import dataclass
-
-
-def _strip_translate_anchor(translated: str) -> str:
-    """Remove the trailing anchor from fnmatch.translate() output.
-
-    Python <=3.13 uses \\Z, Python 3.14+ uses \\z.
-    """
-    for suffix in (r"\Z", r"\z"):
-        if translated.endswith(suffix):
-            return translated[: -len(suffix)]
-    return translated
-
-
-def _glob_to_regex(pattern: str) -> re.Pattern[str]:
-    """Convert a glob pattern (with ** support) to a regex.
-
-    Handles ** as matching zero or more path segments.
-    """
-    # Split on ** to handle recursive matching
-    parts = pattern.split("**")
-    regex_parts = []
-    for i, part in enumerate(parts):
-        # Strip leading/trailing path separators from inner parts
-        if i > 0:
-            part = part.lstrip("/")
-        if i < len(parts) - 1:
-            part = part.rstrip("/")
-        # Convert fnmatch pattern to regex (without the end anchor)
-        translated = fnmatch.translate(part)
-        translated = _strip_translate_anchor(translated)
-        regex_parts.append(translated)
-    # Join with pattern that matches any path segments (including empty)
-    result = r"(?:.*/)?".join(regex_parts) + r"\Z"
-    return re.compile(result)
 
 
 @dataclass
@@ -231,14 +196,21 @@ class MemoryFileSystem:
 
     def opendir(self, path: str) -> "MemoryFileSystem":
         """Return a view rooted at the given subdirectory."""
-        return _MemorySubFS(self, self._normpath(path))
+        if path == ".":
+            return self
+        if path.endswith("/"):
+            path = path.rstrip("/")
+        if not path.startswith("/"):
+            path = "/" + path
+        files = {name[len(path) :]: data for name, data in self._files.items() if name.startswith(path)}
+        dirs = {d[len(path) :] for d in self._dirs if d.startswith(path)}
+        return MemoryFileSystem(files=files, dirs=dirs)
 
     def glob(self, pattern: str) -> Iterator[GlobMatch]:
-        regex = _glob_to_regex(pattern)
         for fpath in sorted(self._files.keys()):
             # Match against relative path from root
             rel = fpath.lstrip("/")
-            if regex.match(rel):
+            if fnmatch.fnmatch(rel, pattern):
                 yield GlobMatch(path=fpath)
 
     def getsyspath(self, path: str) -> str:
@@ -259,63 +231,3 @@ class MemoryFileSystem:
 
     def walk_files(self) -> Iterator[str]:
         yield from sorted(self._files.keys())
-
-
-class _MemorySubFS(MemoryFileSystem):
-    """A view into a MemoryFileSystem rooted at a subdirectory."""
-
-    def __init__(self, parent: MemoryFileSystem, root: str) -> None:
-        # Don't call super().__init__() - we delegate to parent
-        self._parent = parent
-        self._root_prefix = root.rstrip("/")
-
-    def _to_parent_path(self, path: str) -> str:
-        path = path.lstrip("/")
-        if path:
-            return self._root_prefix + "/" + path
-        return self._root_prefix
-
-    def exists(self, path: str) -> bool:
-        return self._parent.exists(self._to_parent_path(path))
-
-    def isdir(self, path: str) -> bool:
-        return self._parent.isdir(self._to_parent_path(path))
-
-    def open(self, path: str, mode: str = "r"):
-        return self._parent.open(self._to_parent_path(path), mode)
-
-    def makedirs(self, path: str) -> None:
-        self._parent.makedirs(self._to_parent_path(path))
-
-    def makedir(self, path: str) -> "MemoryFileSystem":
-        return self._parent.makedir(self._to_parent_path(path))
-
-    def scandir(self, path: str) -> Iterator[DirEntry]:
-        return self._parent.scandir(self._to_parent_path(path))
-
-    def opendir(self, path: str) -> "MemoryFileSystem":
-        return self._parent.opendir(self._to_parent_path(path))
-
-    def glob(self, pattern: str) -> Iterator[GlobMatch]:
-        regex = _glob_to_regex(pattern)
-        prefix = self._root_prefix + "/"
-        for fpath in sorted(self._parent._files.keys()):
-            if fpath.startswith(prefix):
-                rel = fpath[len(prefix) :]
-                if regex.match(rel):
-                    yield GlobMatch(path="/" + rel)
-
-    def getsyspath(self, path: str) -> str:
-        return self._to_parent_path(path)
-
-    def writetext(self, path: str, text: str) -> None:
-        self._parent.writetext(self._to_parent_path(path), text)
-
-    def readtext(self, path: str) -> str:
-        return self._parent.readtext(self._to_parent_path(path))
-
-    def walk_files(self) -> Iterator[str]:
-        prefix = self._root_prefix + "/"
-        for fpath in sorted(self._parent._files.keys()):
-            if fpath.startswith(prefix):
-                yield "/" + fpath[len(prefix) :]

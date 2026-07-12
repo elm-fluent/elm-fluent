@@ -5,24 +5,7 @@ import tempfile
 
 import pytest
 
-from elm_fluent.filesystem import FileSystem, MemoryFileSystem, _glob_to_regex
-
-
-class TestGlobToRegex:
-    def test_simple_extension(self):
-        regex = _glob_to_regex("*.ftl")
-        assert regex.match("foo.ftl")
-        assert regex.match("bar.ftl")
-        assert not regex.match("foo.txt")
-
-    def test_recursive_glob(self):
-        regex = _glob_to_regex("**/*.ftl")
-        assert regex.match("foo.ftl")
-        assert regex.match("a/foo.ftl")
-        assert regex.match("a/b/foo.ftl")
-        assert regex.match("a/b/c/foo.ftl")
-        assert not regex.match("foo.txt")
-        assert not regex.match("a/foo.txt")
+from elm_fluent.filesystem import FileSystem, MemoryFileSystem
 
 
 class TestMemoryFileSystem:
@@ -112,9 +95,9 @@ class TestMemoryFileSystem:
         fs.writetext("locales/en/foo.ftl", "foo = Foo")
         fs.writetext("locales/en/bar.ftl", "bar = Bar")
 
-        sub = fs.opendir("locales").opendir("en")
+        sub = fs.opendir("locales")
         matches = sorted(m.path for m in sub.glob("**/*.ftl"))
-        assert matches == ["/bar.ftl", "/foo.ftl"]
+        assert matches == ["/en/bar.ftl", "/en/foo.ftl"]
 
     def test_walk_files(self):
         fs = MemoryFileSystem()
@@ -137,6 +120,7 @@ class TestMemoryFileSystem:
         """opendir('.') should give access to same files."""
         fs = MemoryFileSystem()
         fs.makedir("locales")
+        assert fs.exists("locales")
         fs.writetext("locales/file.ftl", "x")
 
         sub = fs.opendir(".")

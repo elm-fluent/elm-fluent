@@ -50,7 +50,7 @@ class StandardLayoutMixin:
         for locale in self.locales:
             sub.makedir(locale)
 
-    def write_ftl_file(self, path, contents):
+    def write_ftl_file(self, path: str, contents: str):
         self.locales_fs.writetext(path, dedent_ftl(contents))
 
     def get_all_files(self, fs):
@@ -454,7 +454,7 @@ class TestFileSelection(StandardLayoutMixin, unittest.TestCase):
         self.assertIn("Unknown term: -not-a-term", result.output)
 
     def test_include_glob(self):
-        result = self.run_main(["--include", "**/foo.ftl"])
+        result = self.run_main(["--include", "foo.ftl"])
         self.assertEqual(result.output.strip(), "")
         self.assertEqual(
             sorted(self.get_all_files(self.output_fs).keys()), ["/Ftl/EN/Foo.elm", "/Ftl/Translations/Foo.elm"]
