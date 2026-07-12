@@ -1,21 +1,18 @@
 [project]
 name = "elm-fluent"
-version = "0.7.0"
+version = "0.8.0"
 description = "Fluent i18n solution for Elm"
 readme = "README.rst"
 authors = [
     { name = "Luke Plant", email = "luke@lukeplant.me.uk" }
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Natural Language :: English",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
 ]
@@ -58,6 +55,7 @@ namespaces = false
 
 [dependency-groups]
 dev = [
+    "ipython>=8.39.0",
     "pre-commit>=4.5.1",
     "pytest>=9.0.2",
     "pyvirtualdisplay>=3.0",

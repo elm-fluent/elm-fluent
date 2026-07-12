@@ -53,7 +53,7 @@ def get_output_fs(path):
     help="What to do when translations are missing for a locale, defaults to error",
 )
 @click.option("--default-locale", default="en", help="The default locale, used for fallbacks")
-@click.option("--include", default="**/*.ftl", help="Glob pattern for the FTL files to include")
+@click.option("--include", default="*.ftl", help="Glob pattern for the FTL files to include")
 @click.option(
     "--bdi-isolating/--no-bdi-isolating",
     default=True,

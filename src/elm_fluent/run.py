@@ -1,7 +1,10 @@
 import os.path
+from collections.abc import Sequence
 
 import click
 import language_tags
+
+from elm_fluent.filesystem import FileSystem
 
 from . import error_types
 from .compiler import compile_master, compile_messages, module_name_for_locale
@@ -251,7 +254,7 @@ def path_for_module(options, module_name):
     return os.path.join(options.output_dir, module_name.replace(".", "/") + ".elm")
 
 
-def find_locales(locales_fs, locales_dir, include_glob):
+def find_locales(locales_fs: FileSystem, locales_dir: str, include_glob: str):
     return [
         d.name
         for d in locales_fs.scandir(locales_dir)
@@ -259,16 +262,16 @@ def find_locales(locales_fs, locales_dir, include_glob):
     ]
 
 
-def contains_ftl(fs, include_glob):
+def contains_ftl(fs: FileSystem, include_glob: str):
     return any(is_ftl(m.path) for m in fs.glob(include_glob))
 
 
-def is_ftl(filepath):
+def is_ftl(filepath: str):
     basename = os.path.basename(filepath)
     return basename.endswith(".ftl") and not basename.startswith(".")
 
 
-def find_all_ftl_stems(locales_fs, locales_dir, include_glob, locales):
+def find_all_ftl_stems(locales_fs: FileSystem, locales_dir: str, include_glob: str, locales: Sequence[str]):
     """
     Given a locales directory and a list of locales, finds all the
     ftl stem names. For example, for these files:
